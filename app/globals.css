@@ -1,0 +1,234 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Jharkhand cultural palette */
+  --color-forest: var(--forest);
+  --color-forest-deep: var(--forest-deep);
+  --color-forest-soft: var(--forest-soft);
+  --color-terracotta: var(--terracotta);
+  --color-brick: var(--brick);
+  --color-cream: var(--cream);
+  --color-ivory: var(--ivory);
+  --color-beige: var(--beige);
+  --color-sage: var(--sage);
+  --color-peach: var(--peach);
+  --color-pink: var(--pink);
+  --color-gold: var(--gold);
+  --color-ink: var(--ink);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+:root {
+  color-scheme: light;
+  --radius: 0.875rem;
+
+  /* Core palette (warm, governmental, culturally rooted) */
+  --forest-deep: oklch(0.32 0.045 152);
+  --forest: oklch(0.4 0.06 150);
+  --forest-soft: oklch(0.62 0.05 148);
+  --terracotta: oklch(0.56 0.135 42);
+  --brick: oklch(0.48 0.13 34);
+  --cream: oklch(0.965 0.02 84);
+  --ivory: oklch(0.985 0.012 88);
+  --beige: oklch(0.92 0.025 78);
+  --sage: oklch(0.85 0.035 140);
+  --peach: oklch(0.88 0.055 55);
+  --pink: oklch(0.85 0.045 25);
+  --gold: oklch(0.72 0.1 75);
+  --ink: oklch(0.31 0.03 145);
+
+  --background: oklch(0.965 0.02 84);
+  --foreground: oklch(0.31 0.03 145);
+  --card: oklch(0.988 0.01 88);
+  --card-foreground: oklch(0.31 0.03 145);
+  --popover: oklch(0.99 0.008 88);
+  --popover-foreground: oklch(0.31 0.03 145);
+  --primary: oklch(0.4 0.06 150);
+  --primary-foreground: oklch(0.97 0.02 84);
+  --secondary: oklch(0.56 0.135 42);
+  --secondary-foreground: oklch(0.98 0.015 84);
+  --muted: oklch(0.93 0.022 78);
+  --muted-foreground: oklch(0.5 0.03 140);
+  --accent: oklch(0.88 0.035 130);
+  --accent-foreground: oklch(0.34 0.045 150);
+  --destructive: oklch(0.51 0.16 30);
+  --destructive-foreground: oklch(0.98 0.015 84);
+  --border: oklch(0.86 0.028 75);
+  --input: oklch(0.86 0.028 75);
+  --ring: oklch(0.4 0.06 150);
+
+  --chart-1: oklch(0.4 0.06 150);
+  --chart-2: oklch(0.56 0.135 42);
+  --chart-3: oklch(0.72 0.1 75);
+  --chart-4: oklch(0.62 0.05 148);
+  --chart-5: oklch(0.48 0.13 34);
+
+  --sidebar: oklch(0.34 0.045 150);
+  --sidebar-foreground: oklch(0.9 0.02 84);
+  --sidebar-primary: oklch(0.56 0.135 42);
+  --sidebar-primary-foreground: oklch(0.98 0.015 84);
+  --sidebar-accent: oklch(0.4 0.055 150);
+  --sidebar-accent-foreground: oklch(0.96 0.02 84);
+  --sidebar-border: oklch(0.42 0.05 150);
+  --sidebar-ring: oklch(0.72 0.1 75);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: 'liga' 1, 'calt' 1;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    @apply font-serif;
+  }
+}
+
+@layer utilities {
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  /* Warm paper texture backdrop used across the app */
+  .paper-bg {
+    background-color: var(--cream);
+    background-image:
+      radial-gradient(oklch(0.4 0.06 150 / 0.04) 1px, transparent 1px),
+      radial-gradient(oklch(0.56 0.135 42 / 0.03) 1px, transparent 1px);
+    background-size: 28px 28px, 28px 28px;
+    background-position: 0 0, 14px 14px;
+  }
+  .card-shadow {
+    box-shadow: 0 1px 2px oklch(0.4 0.06 150 / 0.06), 0 8px 24px -12px oklch(0.4 0.06 150 / 0.18);
+  }
+}
+
+/* ------------------------------ Leaflet GIS ------------------------------ */
+.leaflet-container {
+  background: transparent;
+  font-family: var(--font-sans);
+  outline: none;
+}
+.leaflet-container .leaflet-control-zoom a {
+  color: var(--forest-deep);
+  background: var(--card);
+  border-color: var(--border);
+}
+.leaflet-container .leaflet-control-zoom a:hover {
+  background: var(--muted);
+}
+.gis-tooltip.leaflet-tooltip {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 8px 24px -12px oklch(0.4 0.06 150 / 0.35);
+}
+.gis-tooltip.leaflet-tooltip::before {
+  display: none;
+}
+.gis-tip {
+  min-width: 12rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--foreground);
+}
+.gis-tip-name {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--forest-deep);
+  margin-bottom: 0.3rem;
+}
+.gis-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+.gis-tip-row b {
+  color: var(--forest-deep);
+}
+.gis-tip-sev {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+.gis-tip-sev span {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+}
+.gis-tip-sev .crit {
+  background: oklch(0.51 0.16 30 / 0.15);
+  color: var(--destructive);
+}
+.gis-tip-sev .high {
+  background: oklch(0.56 0.135 42 / 0.18);
+  color: var(--secondary);
+}
+.gis-tip-sev .med {
+  background: oklch(0.72 0.1 75 / 0.25);
+  color: oklch(0.42 0.09 65);
+}
+.gis-tip-sev .low {
+  background: oklch(0.85 0.035 140 / 0.6);
+  color: var(--forest-deep);
+}

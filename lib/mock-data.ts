@@ -1,0 +1,935 @@
+import type {
+  AccessibilityAudit,
+  Challenge,
+  Cluster,
+  DistrictStat,
+  Domain,
+  EarlyWarning,
+  IndustryMatch,
+  LifecycleStage,
+  LifecycleStep,
+  Notification,
+  Project,
+  StudentMatch,
+  UniversityMatch,
+  WellbeingSignal,
+} from './types'
+
+export const DOMAINS: Domain[] = [
+  'Education',
+  'Healthcare',
+  'Agriculture',
+  'Water',
+  'Sanitation',
+  'Environment',
+  'Energy',
+  'Urban Infrastructure',
+  'Accessibility',
+  'Public Administration',
+  'Rural Livelihoods',
+  'Mental Health',
+]
+
+export const DISTRICTS = [
+  'Ranchi',
+  'East Singhbhum',
+  'West Singhbhum',
+  'Dhanbad',
+  'Bokaro',
+  'Deoghar',
+  'Dumka',
+  'Hazaribagh',
+  'Giridih',
+  'Godda',
+  'Palamu',
+  'Gumla',
+  'Simdega',
+  'Khunti',
+  'Lohardaga',
+  'Sahibganj',
+  'Pakur',
+  'Jamtara',
+  'Garhwa',
+  'Latehar',
+  'Chatra',
+  'Koderma',
+  'Ramgarh',
+  'Seraikela Kharsawan',
+]
+
+export const LIFECYCLE_STAGES: LifecycleStage[] = [
+  'Reported',
+  'Verified',
+  'AI Classified',
+  'Prioritized',
+  'University Matched',
+  'Team Formed',
+  'Industry Partnered',
+  'Solution Developed',
+  'Pilot',
+  'Implemented',
+  'Impact Measured',
+  'Resolved',
+]
+
+function buildLifecycle(currentStage: LifecycleStage): LifecycleStep[] {
+  const idx = LIFECYCLE_STAGES.indexOf(currentStage)
+  const owners: Record<LifecycleStage, string> = {
+    Reported: 'Citizen',
+    Verified: 'Community',
+    'AI Classified': 'AI Engine',
+    Prioritized: 'District Cell',
+    'University Matched': 'Matching Engine',
+    'Team Formed': 'University',
+    'Industry Partnered': 'Industry Partner',
+    'Solution Developed': 'Student Team',
+    Pilot: 'University + Govt',
+    Implemented: 'District Administration',
+    'Impact Measured': 'Impact Cell',
+    Resolved: 'Government of Jharkhand',
+  }
+  return LIFECYCLE_STAGES.map((stage, i) => {
+    const status = i < idx ? 'done' : i === idx ? 'active' : 'pending'
+    const day = 5 + i * 6
+    return {
+      stage,
+      status,
+      owner: owners[stage],
+      date: i <= idx ? `Day ${day}` : undefined,
+      note: i === idx ? 'Current stage — awaiting next action.' : undefined,
+    } as LifecycleStep
+  })
+}
+
+const stageToStatus: Record<LifecycleStage, Challenge['status']> = {
+  Reported: 'Submitted',
+  Verified: 'Verified',
+  'AI Classified': 'Under Verification',
+  Prioritized: 'Verified',
+  'University Matched': 'Matched',
+  'Team Formed': 'Matched',
+  'Industry Partnered': 'In Progress',
+  'Solution Developed': 'In Progress',
+  Pilot: 'In Progress',
+  Implemented: 'In Progress',
+  'Impact Measured': 'In Progress',
+  Resolved: 'Resolved',
+}
+
+interface Seed {
+  id: string
+  title: string
+  description: string
+  domain: Domain
+  district: string
+  locality: string
+  severity: Challenge['severity']
+  stage: LifecycleStage
+  impactScore: number
+  breakdown: [number, number, number, number, number, number]
+  verifiedCitizens: number
+  communitySupport: number
+  evidenceCount: number
+  affectedPeople: number
+  daysUnresolved: number
+  aiTags: string[]
+  supportingReports: number
+  university?: string
+  industry?: string
+  createdAt: string
+}
+
+const seeds: Seed[] = [
+  {
+    id: 'CH-JH-2026-00482',
+    title: 'Unsafe drinking water from community handpumps',
+    description:
+      'Multiple handpumps in the village draw water with high iron and turbidity. Families report stomach illness, and children miss school after monsoon contamination.',
+    domain: 'Water',
+    district: 'Dumka',
+    locality: 'Kathikund Block',
+    severity: 'Critical',
+    stage: 'Prioritized',
+    impactScore: 87,
+    breakdown: [82, 91, 76, 89, 84, 93],
+    verifiedCitizens: 143,
+    communitySupport: 421,
+    evidenceCount: 18,
+    affectedPeople: 3200,
+    daysUnresolved: 47,
+    aiTags: ['Water Quality', 'Public Health', 'Recurring', 'Monsoon-linked'],
+    supportingReports: 7,
+    createdAt: '12 Jul 2026',
+  },
+  {
+    id: 'CH-JH-2026-00461',
+    title: 'Primary school lacks safe roof and drinking facility',
+    description:
+      'The government primary school roof leaks during rains and there is no functional drinking water point, forcing early closures and lower attendance.',
+    domain: 'Education',
+    district: 'West Singhbhum',
+    locality: 'Sonua',
+    severity: 'High',
+    stage: 'University Matched',
+    impactScore: 79,
+    breakdown: [74, 80, 71, 84, 66, 78],
+    verifiedCitizens: 96,
+    communitySupport: 210,
+    evidenceCount: 12,
+    affectedPeople: 640,
+    daysUnresolved: 33,
+    aiTags: ['School Infrastructure', 'Child Welfare', 'Retention'],
+    supportingReports: 4,
+    university: 'BIT Mesra',
+    createdAt: '26 Jul 2026',
+  },
+  {
+    id: 'CH-JH-2026-00455',
+    title: 'No ramp or accessible pathway at block hospital',
+    description:
+      'Wheelchair users and elderly patients cannot reach the OPD counter. The secondary entrance has steps and a broken pathway with no tactile guidance.',
+    domain: 'Accessibility',
+    district: 'Ranchi',
+    locality: 'Namkum',
+    severity: 'High',
+    stage: 'Team Formed',
+    impactScore: 74,
+    breakdown: [61, 78, 70, 82, 72, 80],
+    verifiedCitizens: 71,
+    communitySupport: 168,
+    evidenceCount: 15,
+    affectedPeople: 1500,
+    daysUnresolved: 28,
+    aiTags: ['Accessibility', 'Healthcare Access', 'Barrier-free'],
+    supportingReports: 3,
+    university: 'NIT Jamshedpur',
+    createdAt: '31 Jul 2026',
+  },
+  {
+    id: 'CH-JH-2026-00448',
+    title: 'Erratic irrigation leaving paddy fields dry',
+    description:
+      'The lift-irrigation canal is silted and pumps fail frequently, so farmers cannot water paddy during critical weeks, reducing yields sharply.',
+    domain: 'Agriculture',
+    district: 'Palamu',
+    locality: 'Chhatarpur',
+    severity: 'High',
+    stage: 'Industry Partnered',
+    impactScore: 81,
+    breakdown: [86, 79, 74, 77, 88, 82],
+    verifiedCitizens: 118,
+    communitySupport: 305,
+    evidenceCount: 9,
+    affectedPeople: 2400,
+    daysUnresolved: 52,
+    aiTags: ['Irrigation', 'Farm Yield', 'Water Management'],
+    supportingReports: 6,
+    university: 'BIT Mesra',
+    industry: 'AgriSense Technologies',
+    createdAt: '08 Jul 2026',
+  },
+  {
+    id: 'CH-JH-2026-00432',
+    title: 'Open waste dumping near residential colony',
+    description:
+      'Household waste is dumped in an open plot with no collection schedule, creating odour, stray-animal, and mosquito problems for nearby homes.',
+    domain: 'Sanitation',
+    district: 'Dhanbad',
+    locality: 'Jharia',
+    severity: 'Medium',
+    stage: 'Verified',
+    impactScore: 68,
+    breakdown: [70, 62, 78, 60, 72, 66],
+    verifiedCitizens: 54,
+    communitySupport: 132,
+    evidenceCount: 8,
+    affectedPeople: 900,
+    daysUnresolved: 21,
+    aiTags: ['Solid Waste', 'Urban Sanitation', 'Vector Control'],
+    supportingReports: 5,
+    createdAt: '13 Aug 2026',
+  },
+  {
+    id: 'CH-JH-2026-00419',
+    title: 'Frequent power cuts disrupting rural clinic cold chain',
+    description:
+      'Long outages threaten the vaccine cold chain at the sub-health centre, risking spoilage. A reliable backup and monitoring are needed.',
+    domain: 'Energy',
+    district: 'Gumla',
+    locality: 'Bishunpur',
+    severity: 'Critical',
+    stage: 'Solution Developed',
+    impactScore: 84,
+    breakdown: [72, 90, 68, 85, 80, 92],
+    verifiedCitizens: 63,
+    communitySupport: 149,
+    evidenceCount: 11,
+    affectedPeople: 5400,
+    daysUnresolved: 61,
+    aiTags: ['Cold Chain', 'Rural Electrification', 'Solar Backup'],
+    supportingReports: 4,
+    university: 'NIT Jamshedpur',
+    industry: 'SolarGrid MSME Cluster',
+    createdAt: '29 Jun 2026',
+  },
+  {
+    id: 'CH-JH-2026-00405',
+    title: 'Forest edge encroachment threatening water catchment',
+    description:
+      'Unregulated clearing near the catchment is increasing siltation of the local stream, affecting both wildlife and downstream drinking water.',
+    domain: 'Environment',
+    district: 'Latehar',
+    locality: 'Netarhat',
+    severity: 'Medium',
+    stage: 'AI Classified',
+    impactScore: 71,
+    breakdown: [64, 68, 60, 74, 82, 70],
+    verifiedCitizens: 38,
+    communitySupport: 97,
+    evidenceCount: 7,
+    affectedPeople: 1800,
+    daysUnresolved: 18,
+    aiTags: ['Catchment', 'Deforestation', 'Ecology'],
+    supportingReports: 3,
+    createdAt: '16 Aug 2026',
+  },
+  {
+    id: 'CH-JH-2026-00398',
+    title: 'Poor road access cutting off village during rains',
+    description:
+      'The approach road becomes impassable in the monsoon, delaying ambulances and stopping students and produce from reaching town.',
+    domain: 'Urban Infrastructure',
+    district: 'Simdega',
+    locality: 'Kolebira',
+    severity: 'High',
+    stage: 'Pilot',
+    impactScore: 76,
+    breakdown: [78, 82, 70, 66, 74, 80],
+    verifiedCitizens: 89,
+    communitySupport: 240,
+    evidenceCount: 10,
+    affectedPeople: 2100,
+    daysUnresolved: 40,
+    aiTags: ['Rural Roads', 'Connectivity', 'Emergency Access'],
+    supportingReports: 5,
+    university: 'BIT Sindri',
+    industry: 'BuildRight Infra',
+    createdAt: '20 Jul 2026',
+  },
+  {
+    id: 'CH-JH-2026-00377',
+    title: 'Limited maternal healthcare reach in interior villages',
+    description:
+      'Expecting mothers travel long distances for check-ups; a shortage of ANM visits and transport leads to missed antenatal care.',
+    domain: 'Healthcare',
+    district: 'Sahibganj',
+    locality: 'Borio',
+    severity: 'Critical',
+    stage: 'Implemented',
+    impactScore: 88,
+    breakdown: [80, 93, 79, 86, 88, 94],
+    verifiedCitizens: 102,
+    communitySupport: 268,
+    evidenceCount: 14,
+    affectedPeople: 4300,
+    daysUnresolved: 12,
+    aiTags: ['Maternal Health', 'Last-mile Care', 'Transport'],
+    supportingReports: 6,
+    university: 'RIMS Ranchi',
+    industry: 'CareLink Health',
+    createdAt: '02 Aug 2026',
+  },
+  {
+    id: 'CH-JH-2026-00341',
+    title: 'Handicraft artisans lack market linkage and fair pricing',
+    description:
+      'Tribal artisans depend on middlemen and get low prices. A digital catalogue and cooperative model could improve livelihoods.',
+    domain: 'Rural Livelihoods',
+    district: 'Khunti',
+    locality: 'Torpa',
+    severity: 'Medium',
+    stage: 'Resolved',
+    impactScore: 72,
+    breakdown: [68, 60, 82, 70, 76, 66],
+    verifiedCitizens: 47,
+    communitySupport: 158,
+    evidenceCount: 9,
+    affectedPeople: 1200,
+    daysUnresolved: 0,
+    aiTags: ['Livelihoods', 'Market Linkage', 'Cooperative'],
+    supportingReports: 4,
+    university: 'Xavier Institute XISS',
+    industry: 'CraftBazaar Startup',
+    createdAt: '19 May 2026',
+  },
+  {
+    id: 'CH-JH-2026-00318',
+    title: 'Rising community distress signals after seasonal migration',
+    description:
+      'Local support groups report more requests for counselling and community support during the migration season. Aggregated, anonymous signals only.',
+    domain: 'Mental Health',
+    district: 'Godda',
+    locality: 'Pathargama',
+    severity: 'Medium',
+    stage: 'Prioritized',
+    impactScore: 66,
+    breakdown: [58, 64, 72, 55, 80, 70],
+    verifiedCitizens: 29,
+    communitySupport: 88,
+    evidenceCount: 5,
+    affectedPeople: 2600,
+    daysUnresolved: 24,
+    aiTags: ['Community Wellbeing', 'Support Resources', 'Aggregated Signal'],
+    supportingReports: 3,
+    createdAt: '11 Aug 2026',
+  },
+  {
+    id: 'CH-JH-2026-00292',
+    title: 'Digital service access gap at panchayat centre',
+    description:
+      'Residents struggle to access online government services and certificates; the common service point has weak connectivity and no assistance.',
+    domain: 'Public Administration',
+    district: 'Garhwa',
+    locality: 'Ranka',
+    severity: 'Low',
+    stage: 'Reported',
+    impactScore: 58,
+    breakdown: [60, 48, 64, 52, 66, 58],
+    verifiedCitizens: 18,
+    communitySupport: 61,
+    evidenceCount: 4,
+    affectedPeople: 1700,
+    daysUnresolved: 9,
+    aiTags: ['e-Governance', 'Digital Access', 'Service Delivery'],
+    supportingReports: 2,
+    createdAt: '25 Aug 2026',
+  },
+]
+
+export const challenges: Challenge[] = seeds.map((s) => ({
+  id: s.id,
+  title: s.title,
+  description: s.description,
+  domain: s.domain,
+  district: s.district,
+  locality: s.locality,
+  severity: s.severity,
+  status: stageToStatus[s.stage],
+  stage: s.stage,
+  impactScore: s.impactScore,
+  impactBreakdown: {
+    affectedPopulation: s.breakdown[0],
+    severity: s.breakdown[1],
+    communitySupport: s.breakdown[2],
+    evidenceQuality: s.breakdown[3],
+    recurrence: s.breakdown[4],
+    urgency: s.breakdown[5],
+  },
+  verifiedCitizens: s.verifiedCitizens,
+  communitySupport: s.communitySupport,
+  evidenceCount: s.evidenceCount,
+  affectedPeople: s.affectedPeople,
+  daysUnresolved: s.daysUnresolved,
+  aiTags: s.aiTags,
+  supportingReports: s.supportingReports,
+  university: s.university,
+  industry: s.industry,
+  createdAt: s.createdAt,
+  lifecycle: buildLifecycle(s.stage),
+}))
+
+export const districtStats: DistrictStat[] = [
+  { name: 'Garhwa', x: 12, y: 34, activeChallenges: 38, highPriority: 9, verifiedReports: 61, agingProblems: 6, projectsActive: 4, impactScore: 64, layers: { Water: 62, Healthcare: 40, Education: 55, Agriculture: 70, Environment: 45, 'Urban Infrastructure': 50, Accessibility: 30 } },
+  { name: 'Palamu', x: 20, y: 40, activeChallenges: 71, highPriority: 18, verifiedReports: 132, agingProblems: 12, projectsActive: 7, impactScore: 74, layers: { Water: 78, Healthcare: 55, Education: 60, Agriculture: 88, Environment: 50, 'Urban Infrastructure': 58, Accessibility: 42 } },
+  { name: 'Latehar', x: 26, y: 48, activeChallenges: 44, highPriority: 11, verifiedReports: 79, agingProblems: 7, projectsActive: 3, impactScore: 67, layers: { Water: 58, Healthcare: 48, Education: 52, Agriculture: 66, Environment: 82, 'Urban Infrastructure': 44, Accessibility: 28 } },
+  { name: 'Chatra', x: 34, y: 34, activeChallenges: 33, highPriority: 7, verifiedReports: 58, agingProblems: 5, projectsActive: 2, impactScore: 61, layers: { Water: 54, Healthcare: 44, Education: 48, Agriculture: 62, Environment: 40, 'Urban Infrastructure': 38, Accessibility: 26 } },
+  { name: 'Latehar', x: 26, y: 48, activeChallenges: 44, highPriority: 11, verifiedReports: 79, agingProblems: 7, projectsActive: 3, impactScore: 67, layers: {} },
+  { name: 'Lohardaga', x: 32, y: 54, activeChallenges: 22, highPriority: 4, verifiedReports: 41, agingProblems: 3, projectsActive: 2, impactScore: 57, layers: { Water: 46, Healthcare: 38, Education: 44, Agriculture: 52, Environment: 48, 'Urban Infrastructure': 34, Accessibility: 24 } },
+  { name: 'Gumla', x: 30, y: 64, activeChallenges: 49, highPriority: 13, verifiedReports: 88, agingProblems: 9, projectsActive: 5, impactScore: 70, layers: { Water: 60, Healthcare: 66, Education: 50, Agriculture: 58, Environment: 62, 'Urban Infrastructure': 42, Accessibility: 36 } },
+  { name: 'Simdega', x: 30, y: 76, activeChallenges: 36, highPriority: 8, verifiedReports: 64, agingProblems: 6, projectsActive: 4, impactScore: 66, layers: { Water: 52, Healthcare: 48, Education: 58, Agriculture: 54, Environment: 50, 'Urban Infrastructure': 64, Accessibility: 40 } },
+  { name: 'Koderma', x: 52, y: 24, activeChallenges: 28, highPriority: 6, verifiedReports: 47, agingProblems: 4, projectsActive: 2, impactScore: 60, layers: { Water: 44, Healthcare: 42, Education: 46, Agriculture: 40, Environment: 44, 'Urban Infrastructure': 48, Accessibility: 30 } },
+  { name: 'Hazaribagh', x: 46, y: 34, activeChallenges: 57, highPriority: 14, verifiedReports: 103, agingProblems: 10, projectsActive: 6, impactScore: 72, layers: { Water: 64, Healthcare: 58, Education: 62, Agriculture: 60, Environment: 54, 'Urban Infrastructure': 56, Accessibility: 38 } },
+  { name: 'Giridih', x: 60, y: 30, activeChallenges: 63, highPriority: 16, verifiedReports: 118, agingProblems: 11, projectsActive: 6, impactScore: 73, layers: { Water: 66, Healthcare: 60, Education: 58, Agriculture: 62, Environment: 52, 'Urban Infrastructure': 60, Accessibility: 40 } },
+  { name: 'Ramgarh', x: 46, y: 46, activeChallenges: 31, highPriority: 7, verifiedReports: 55, agingProblems: 4, projectsActive: 3, impactScore: 63, layers: { Water: 50, Healthcare: 46, Education: 50, Agriculture: 44, Environment: 58, 'Urban Infrastructure': 62, Accessibility: 34 } },
+  { name: 'Ranchi', x: 42, y: 56, activeChallenges: 96, highPriority: 24, verifiedReports: 188, agingProblems: 15, projectsActive: 12, impactScore: 79, layers: { Water: 58, Healthcare: 74, Education: 70, Agriculture: 48, Environment: 56, 'Urban Infrastructure': 82, Accessibility: 64 } },
+  { name: 'Khunti', x: 42, y: 66, activeChallenges: 34, highPriority: 8, verifiedReports: 62, agingProblems: 5, projectsActive: 4, impactScore: 65, layers: { Water: 54, Healthcare: 50, Education: 52, Agriculture: 66, Environment: 60, 'Urban Infrastructure': 40, Accessibility: 44 } },
+  { name: 'Bokaro', x: 58, y: 42, activeChallenges: 52, highPriority: 12, verifiedReports: 97, agingProblems: 8, projectsActive: 5, impactScore: 71, layers: { Water: 56, Healthcare: 60, Education: 64, Agriculture: 42, Environment: 58, 'Urban Infrastructure': 76, Accessibility: 50 } },
+  { name: 'Dhanbad', x: 68, y: 40, activeChallenges: 74, highPriority: 19, verifiedReports: 141, agingProblems: 13, projectsActive: 7, impactScore: 76, layers: { Water: 60, Healthcare: 64, Education: 62, Agriculture: 38, Environment: 66, 'Urban Infrastructure': 84, Accessibility: 52 } },
+  { name: 'Dumka', x: 72, y: 26, activeChallenges: 68, highPriority: 21, verifiedReports: 126, agingProblems: 14, projectsActive: 5, impactScore: 77, layers: { Water: 90, Healthcare: 62, Education: 58, Agriculture: 64, Environment: 54, 'Urban Infrastructure': 46, Accessibility: 42 } },
+  { name: 'Jamtara', x: 72, y: 34, activeChallenges: 26, highPriority: 5, verifiedReports: 44, agingProblems: 3, projectsActive: 2, impactScore: 59, layers: { Water: 48, Healthcare: 44, Education: 46, Agriculture: 50, Environment: 42, 'Urban Infrastructure': 40, Accessibility: 30 } },
+  { name: 'Deoghar', x: 76, y: 20, activeChallenges: 41, highPriority: 9, verifiedReports: 73, agingProblems: 6, projectsActive: 3, impactScore: 66, layers: { Water: 52, Healthcare: 56, Education: 54, Agriculture: 48, Environment: 46, 'Urban Infrastructure': 58, Accessibility: 38 } },
+  { name: 'Sahibganj', x: 84, y: 14, activeChallenges: 47, highPriority: 15, verifiedReports: 82, agingProblems: 9, projectsActive: 4, impactScore: 74, layers: { Water: 68, Healthcare: 88, Education: 56, Agriculture: 62, Environment: 60, 'Urban Infrastructure': 44, Accessibility: 40 } },
+  { name: 'Pakur', x: 88, y: 22, activeChallenges: 24, highPriority: 5, verifiedReports: 42, agingProblems: 3, projectsActive: 2, impactScore: 58, layers: { Water: 50, Healthcare: 46, Education: 44, Agriculture: 54, Environment: 44, 'Urban Infrastructure': 38, Accessibility: 28 } },
+  { name: 'Seraikela Kharsawan', x: 52, y: 70, activeChallenges: 39, highPriority: 9, verifiedReports: 71, agingProblems: 6, projectsActive: 4, impactScore: 67, layers: { Water: 52, Healthcare: 50, Education: 54, Agriculture: 48, Environment: 56, 'Urban Infrastructure': 70, Accessibility: 42 } },
+  { name: 'West Singhbhum', x: 44, y: 82, activeChallenges: 58, highPriority: 17, verifiedReports: 106, agingProblems: 11, projectsActive: 6, impactScore: 73, layers: { Water: 58, Healthcare: 54, Education: 82, Agriculture: 60, Environment: 68, 'Urban Infrastructure': 48, Accessibility: 44 } },
+  { name: 'East Singhbhum', x: 62, y: 74, activeChallenges: 81, highPriority: 20, verifiedReports: 152, agingProblems: 12, projectsActive: 9, impactScore: 78, layers: { Water: 54, Healthcare: 66, Education: 68, Agriculture: 44, Environment: 62, 'Urban Infrastructure': 80, Accessibility: 58 } },
+].filter((d, i, arr) => arr.findIndex((x) => x.name === d.name) === i)
+
+export const MAP_LAYERS = [
+  'Challenge Density',
+  'Healthcare',
+  'Water',
+  'Education',
+  'Agriculture',
+  'Environment',
+  'Urban Infrastructure',
+  'Accessibility',
+]
+
+export const universityMatches: UniversityMatch[] = [
+  {
+    id: 'u1',
+    name: 'BIT Mesra, Ranchi',
+    district: 'Ranchi',
+    matchScore: 94,
+    reasons: [
+      'Relevant Civil & Environmental Engineering department',
+      'Faculty expertise in water treatment & filtration',
+      'Prior funded research on rural water quality',
+      'Water-testing laboratory capability on campus',
+      'Active innovation & incubation centre',
+      'Geographically close to affected district',
+    ],
+    factors: [
+      { label: 'Academic Expertise', score: 96 },
+      { label: 'Faculty Expertise', score: 93 },
+      { label: 'Past Projects', score: 90 },
+      { label: 'Infrastructure', score: 95 },
+      { label: 'Innovation Capacity', score: 92 },
+      { label: 'Geographic Relevance', score: 88 },
+    ],
+  },
+  {
+    id: 'u2',
+    name: 'NIT Jamshedpur',
+    district: 'East Singhbhum',
+    matchScore: 87,
+    reasons: [
+      'Strong Electrical & Instrumentation programmes',
+      'Sensor & IoT research labs',
+      'Faculty publications on rural monitoring systems',
+      'Established industry linkages',
+    ],
+    factors: [
+      { label: 'Academic Expertise', score: 90 },
+      { label: 'Faculty Expertise', score: 86 },
+      { label: 'Past Projects', score: 82 },
+      { label: 'Infrastructure', score: 91 },
+      { label: 'Innovation Capacity', score: 88 },
+      { label: 'Geographic Relevance', score: 78 },
+    ],
+  },
+  {
+    id: 'u3',
+    name: 'BIT Sindri, Dhanbad',
+    district: 'Dhanbad',
+    matchScore: 81,
+    reasons: [
+      'Civil engineering & public health engineering focus',
+      'Field project experience in nearby districts',
+      'Community outreach cell',
+    ],
+    factors: [
+      { label: 'Academic Expertise', score: 84 },
+      { label: 'Faculty Expertise', score: 80 },
+      { label: 'Past Projects', score: 78 },
+      { label: 'Infrastructure', score: 82 },
+      { label: 'Innovation Capacity', score: 79 },
+      { label: 'Geographic Relevance', score: 84 },
+    ],
+  },
+]
+
+export const industryMatches: IndustryMatch[] = [
+  {
+    id: 'i1',
+    name: 'AgriSense Technologies',
+    sector: 'AgriTech / IoT',
+    matchScore: 94,
+    provides: ['₹8L pilot funding', 'IoT sensor hardware', 'Cloud infrastructure', 'Domain mentor'],
+    reasons: [
+      'Portfolio in low-cost water & soil sensors',
+      'CSR mandate aligned with rural water security',
+      'Manufacturing partner network in eastern India',
+    ],
+  },
+  {
+    id: 'i2',
+    name: 'SolarGrid MSME Cluster',
+    sector: 'Clean Energy',
+    matchScore: 88,
+    provides: ['Solar backup hardware', 'Installation crew', 'Maintenance training'],
+    reasons: ['Deployed rural micro-grids previously', 'Local presence in Jharkhand', 'Skilling programme for youth'],
+  },
+  {
+    id: 'i3',
+    name: 'CareLink Health',
+    sector: 'HealthTech',
+    matchScore: 81,
+    provides: ['Telemedicine platform', 'Mentorship', 'CSR co-funding'],
+    reasons: ['Last-mile maternal health programmes', 'Existing ANM training content', 'Data privacy compliant stack'],
+  },
+]
+
+export const duplicateCluster: Cluster = {
+  clusterTitle: 'Unsafe Drinking Water in Kathikund Block',
+  district: 'Dumka',
+  primaryChallengeId: 'CH-JH-2026-00482',
+  reports: [
+    { id: 'R-1', locality: 'Kathikund', date: '12 Jul', similarity: 100, support: 142, evidence: 6 },
+    { id: 'R-2', locality: 'Shikaripara', date: '14 Jul', similarity: 96, support: 88, evidence: 4 },
+    { id: 'R-3', locality: 'Kathikund East', date: '15 Jul', similarity: 93, support: 64, evidence: 3 },
+    { id: 'R-4', locality: 'Ranishwar', date: '18 Jul', similarity: 90, support: 51, evidence: 2 },
+    { id: 'R-5', locality: 'Masalia', date: '21 Jul', similarity: 87, support: 44, evidence: 2 },
+    { id: 'R-6', locality: 'Gopikandar', date: '23 Jul', similarity: 84, support: 30, evidence: 1 },
+    { id: 'R-7', locality: 'Kathikund North', date: '26 Jul', similarity: 82, support: 22, evidence: 1 },
+  ],
+}
+
+export const earlyWarnings: EarlyWarning[] = [
+  {
+    id: 'ew1',
+    title: 'Potential Water Stress Detected',
+    domain: 'Water',
+    district: 'Dumka',
+    risk: 'Elevated',
+    confidence: 82,
+    signals: [
+      { label: 'Water-related reports', delta: '+48%' },
+      { label: 'Reports from adjacent areas', delta: '+31%' },
+      { label: 'Reported severity', delta: '+22%' },
+    ],
+    relatedReports: 27,
+    recommendation: 'Review district-level water infrastructure reports and pre-position testing kits.',
+  },
+  {
+    id: 'ew2',
+    title: 'Healthcare Accessibility Signals Rising',
+    domain: 'Healthcare',
+    district: 'Sahibganj',
+    risk: 'High',
+    confidence: 76,
+    signals: [
+      { label: 'Maternal-care reports', delta: '+29%' },
+      { label: 'Transport-barrier mentions', delta: '+34%' },
+      { label: 'Unresolved > 30 days', delta: '+18%' },
+    ],
+    relatedReports: 19,
+    recommendation: 'Assess ANM coverage and last-mile transport support in interior blocks.',
+  },
+  {
+    id: 'ew3',
+    title: 'Community Wellbeing Signal',
+    domain: 'Mental Health',
+    district: 'Godda',
+    risk: 'Moderate',
+    confidence: 68,
+    signals: [
+      { label: 'Requests for community support', delta: '+24%' },
+      { label: 'Seasonal migration correlation', delta: '+15%' },
+    ],
+    relatedReports: 11,
+    recommendation: 'Review availability of local support resources. Aggregated community-level signals — no individual diagnosis.',
+  },
+]
+
+export const accessibilityAudits: AccessibilityAudit[] = [
+  {
+    id: 'AC-001',
+    facility: 'Sadar District Hospital',
+    type: 'Hospital',
+    district: 'Ranchi',
+    locality: 'Namkum',
+    score: 42,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Absent' },
+      { label: 'Accessible toilet', status: 'Partial' },
+      { label: 'Tactile paving', status: 'Absent' },
+      { label: 'Signage & wayfinding', status: 'Present' },
+      { label: 'Trained assistance', status: 'Partial' },
+    ],
+  },
+  {
+    id: 'AC-002',
+    facility: 'Govt. Girls High School',
+    type: 'School',
+    district: 'West Singhbhum',
+    locality: 'Sonua',
+    score: 30,
+    compliance: 'Non-compliant',
+    criteria: [
+      { label: 'Ramp access', status: 'Absent' },
+      { label: 'Accessible toilet', status: 'Absent' },
+      { label: 'Tactile paving', status: 'Absent' },
+      { label: 'Signage & wayfinding', status: 'Partial' },
+      { label: 'Trained assistance', status: 'Absent' },
+    ],
+  },
+  {
+    id: 'AC-003',
+    facility: 'Ranchi Inter-State Bus Terminal',
+    type: 'Transport Hub',
+    district: 'Ranchi',
+    locality: 'Khadgarha',
+    score: 68,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Present' },
+      { label: 'Accessible toilet', status: 'Present' },
+      { label: 'Tactile paving', status: 'Partial' },
+      { label: 'Signage & wayfinding', status: 'Present' },
+      { label: 'Trained assistance', status: 'Absent' },
+    ],
+  },
+  {
+    id: 'AC-004',
+    facility: 'Block Development Office',
+    type: 'Govt Office',
+    district: 'Dhanbad',
+    locality: 'Jharia',
+    score: 55,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Present' },
+      { label: 'Accessible toilet', status: 'Partial' },
+      { label: 'Tactile paving', status: 'Absent' },
+      { label: 'Signage & wayfinding', status: 'Present' },
+      { label: 'Trained assistance', status: 'Partial' },
+    ],
+  },
+  {
+    id: 'AC-005',
+    facility: 'Community Health Centre',
+    type: 'Hospital',
+    district: 'Gumla',
+    locality: 'Bishunpur',
+    score: 88,
+    compliance: 'Compliant',
+    criteria: [
+      { label: 'Ramp access', status: 'Present' },
+      { label: 'Accessible toilet', status: 'Present' },
+      { label: 'Tactile paving', status: 'Present' },
+      { label: 'Signage & wayfinding', status: 'Present' },
+      { label: 'Trained assistance', status: 'Partial' },
+    ],
+  },
+  {
+    id: 'AC-006',
+    facility: 'Municipal Park & Plaza',
+    type: 'Public Space',
+    district: 'East Singhbhum',
+    locality: 'Sakchi',
+    score: 74,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Present' },
+      { label: 'Accessible toilet', status: 'Present' },
+      { label: 'Tactile paving', status: 'Partial' },
+      { label: 'Signage & wayfinding', status: 'Partial' },
+      { label: 'Trained assistance', status: 'Present' },
+    ],
+  },
+  {
+    id: 'AC-007',
+    facility: 'Primary School Cluster',
+    type: 'School',
+    district: 'Palamu',
+    locality: 'Chhatarpur',
+    score: 46,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Partial' },
+      { label: 'Accessible toilet', status: 'Absent' },
+      { label: 'Tactile paving', status: 'Absent' },
+      { label: 'Signage & wayfinding', status: 'Present' },
+      { label: 'Trained assistance', status: 'Partial' },
+    ],
+  },
+  {
+    id: 'AC-008',
+    facility: 'Railway Station (East Entry)',
+    type: 'Transport Hub',
+    district: 'Dhanbad',
+    locality: 'Dhanbad Jn.',
+    score: 62,
+    compliance: 'Partial',
+    criteria: [
+      { label: 'Ramp access', status: 'Present' },
+      { label: 'Accessible toilet', status: 'Partial' },
+      { label: 'Tactile paving', status: 'Present' },
+      { label: 'Signage & wayfinding', status: 'Partial' },
+      { label: 'Trained assistance', status: 'Absent' },
+    ],
+  },
+]
+
+export const wellbeingSignals: WellbeingSignal[] = [
+  { district: 'Godda', index: 58, trend: 'Declining', supportCoverage: 34 },
+  { district: 'Sahibganj', index: 62, trend: 'Stable', supportCoverage: 41 },
+  { district: 'Dumka', index: 55, trend: 'Declining', supportCoverage: 29 },
+  { district: 'Ranchi', index: 74, trend: 'Improving', supportCoverage: 68 },
+  { district: 'Palamu', index: 60, trend: 'Stable', supportCoverage: 38 },
+  { district: 'Gumla', index: 66, trend: 'Improving', supportCoverage: 52 },
+]
+
+export const wellbeingWarnings: EarlyWarning[] = [
+  {
+    id: 'wb1',
+    title: 'Rising Community Distress After Seasonal Migration',
+    domain: 'Mental Health',
+    district: 'Godda',
+    risk: 'Elevated',
+    confidence: 71,
+    signals: [
+      { label: 'Requests for community support', delta: '+27%' },
+      { label: 'Seasonal migration correlation', delta: '+19%' },
+      { label: 'Youth support enquiries', delta: '+14%' },
+    ],
+    relatedReports: 16,
+    recommendation:
+      'Pre-position counselling & peer-support resources with local NGOs. Aggregated community-level signal only — no individual diagnosis.',
+  },
+  {
+    id: 'wb2',
+    title: 'Wellbeing Support Gap in Interior Blocks',
+    domain: 'Mental Health',
+    district: 'Dumka',
+    risk: 'High',
+    confidence: 69,
+    signals: [
+      { label: 'Support-resource coverage', delta: '-12%' },
+      { label: 'Distance-to-service mentions', delta: '+22%' },
+      { label: 'Community helpline calls', delta: '+18%' },
+    ],
+    relatedReports: 13,
+    recommendation:
+      'Extend tele-counselling helpline hours and map nearest support centres. Anonymised, aggregate signals only.',
+  },
+  {
+    id: 'wb3',
+    title: 'Adolescent Wellbeing Signal Near Schools',
+    domain: 'Mental Health',
+    district: 'Sahibganj',
+    risk: 'Moderate',
+    confidence: 64,
+    signals: [
+      { label: 'School-linked support requests', delta: '+16%' },
+      { label: 'Attendance-drop correlation', delta: '+9%' },
+    ],
+    relatedReports: 9,
+    recommendation:
+      'Coordinate with school counsellors and review psychosocial support availability. Privacy-preserving community signal only.',
+  },
+]
+
+export const projects: Project[] = [
+  {
+    id: 'PRJ-JH-2026-0043',
+    title: 'Smart Rural Water Monitoring System',
+    status: 'Pilot',
+    domain: 'Water',
+    district: 'Dumka',
+    problem: 'Unsafe drinking water from community handpumps (CH-JH-2026-00482)',
+    community: 'Kathikund Block community groups',
+    university: 'BIT Mesra, Ranchi',
+    team: 'Team JalRakshak (5 students)',
+    faculty: 'Dr. A. Mahato — Environmental Engineering',
+    industry: 'AgriSense Technologies',
+    department: 'Dept. of Drinking Water & Sanitation',
+    timeline: buildLifecycle('Pilot'),
+    milestones: [
+      { name: 'Research & baseline survey', due: 'Day 20', status: 'Done', owner: 'Student Team', deliverables: ['Water quality baseline', 'Site survey report'] },
+      { name: 'Prototype sensor node', due: 'Day 45', status: 'Done', owner: 'Student Team + Industry', deliverables: ['IoT sensor node v1', 'Cloud dashboard'] },
+      { name: 'Field testing', due: 'Day 70', status: 'In Progress', owner: 'University', deliverables: ['5-village field test', 'Calibration report'] },
+      { name: 'Pilot deployment', due: 'Day 95', status: 'In Progress', owner: 'University + Govt', deliverables: ['20 nodes installed', 'Alert workflow'] },
+      { name: 'Deployment & handover', due: 'Day 130', status: 'Upcoming', owner: 'District Administration', deliverables: ['Operations manual', 'Maintenance training'] },
+    ],
+  },
+]
+
+export const notifications: Notification[] = [
+  { id: 'n1', title: 'Your challenge has been verified', detail: 'CH-JH-2026-00482 reached the community verification threshold.', time: '2h ago', type: 'verify', unread: true },
+  { id: 'n2', title: '7 similar reports were detected', detail: 'AI clustered your report with 6 others in Kathikund Block.', time: '5h ago', type: 'ai', unread: true },
+  { id: 'n3', title: 'Matched with a university', detail: 'BIT Mesra was recommended with a 94% explainable match.', time: '1d ago', type: 'match', unread: true },
+  { id: 'n4', title: 'University accepted the challenge', detail: 'BIT Mesra accepted CH-JH-2026-00461 and formed a team.', time: '2d ago', type: 'match', unread: false },
+  { id: 'n5', title: 'Industry partner requested collaboration', detail: 'AgriSense Technologies offered pilot funding & IoT hardware.', time: '3d ago', type: 'industry', unread: false },
+  { id: 'n6', title: 'Milestone deadline approaching', detail: 'Field testing milestone for PRJ-JH-2026-0043 is due in 4 days.', time: '4d ago', type: 'milestone', unread: false },
+]
+
+export const studentMatches: StudentMatch[] = [
+  {
+    ...challenges[0],
+    matchPercent: 92,
+    matchReasons: [
+      'Your AI/ML & Data Science skills',
+      'Relevant academic project on water analytics',
+      'Required IoT technology stack',
+      "Your university's water-testing research capability",
+    ],
+  },
+  {
+    ...challenges[5],
+    matchPercent: 88,
+    matchReasons: [
+      'Your IoT & Energy systems coursework',
+      'Prior hackathon project on solar monitoring',
+      'Match with faculty mentor availability',
+    ],
+  },
+  {
+    ...challenges[3],
+    matchPercent: 84,
+    matchReasons: ['Agriculture Technology interest', 'GIS mapping experience', 'Data Science skillset'],
+  },
+]
+
+export const STUDENT_SKILLS = ['AI/ML', 'Data Science', 'IoT', 'Web Development', 'Agriculture Technology', 'GIS', 'Healthcare Technology']
+
+/** Landing / impact headline metrics (prototype demo values). */
+export const platformMetrics = {
+  activeChallenges: '1,240+',
+  universities: '85+',
+  industry: '40+',
+  resources: '₹3.2 Cr+',
+}
+
+export const impactStats = {
+  received: 1240,
+  resolved: 312,
+  peopleImpacted: '4.8 L+',
+  districts: 23,
+  universityProjects: 168,
+  industryPartnerships: 40,
+  innovations: 57,
+  deployed: 92,
+}
+
+export const domainDistribution: { domain: Domain; value: number }[] = [
+  { domain: 'Water', value: 24 },
+  { domain: 'Healthcare', value: 18 },
+  { domain: 'Education', value: 16 },
+  { domain: 'Agriculture', value: 14 },
+  { domain: 'Sanitation', value: 9 },
+  { domain: 'Environment', value: 7 },
+  { domain: 'Urban Infrastructure', value: 6 },
+  { domain: 'Accessibility', value: 6 },
+]
+
+export const pipeline = [
+  { stage: 'Challenges', value: 1240 },
+  { stage: 'Verified', value: 742 },
+  { stage: 'Matched', value: 418 },
+  { stage: 'In Development', value: 236 },
+  { stage: 'Pilot', value: 118 },
+  { stage: 'Implemented', value: 92 },
+]
+
+export const resolutionTrend = [
+  { month: 'Mar', reported: 92, resolved: 18 },
+  { month: 'Apr', reported: 118, resolved: 27 },
+  { month: 'May', reported: 141, resolved: 39 },
+  { month: 'Jun', reported: 166, resolved: 52 },
+  { month: 'Jul', reported: 203, resolved: 71 },
+  { month: 'Aug', reported: 248, resolved: 105 },
+]
