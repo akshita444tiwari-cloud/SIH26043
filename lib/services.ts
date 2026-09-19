@@ -18,19 +18,82 @@ import {
   wellbeingWarnings,
 } from './mock-data'
 import type { Challenge, Domain, Role } from './types'
+import { supabase } from './supabase/client'
 
 export async function getChallenges(): Promise<Challenge[]> {
-  return challenges
+  const { data, error } = await supabase
+    .from('problems')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching challenges:', error)
+    return []
+  }
+
+  return (data ?? []).map((p): Challenge => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    domain: p.category as Domain,
+    district: p.district,
+    locality: p.location_name || p.village || p.block || p.district,
+    severity:
+      p.priority === 'Critical'
+        ? 'Critical'
+        : p.priority === 'High'
+          ? 'High'
+          : p.priority === 'Low'
+            ? 'Low'
+            : 'Medium',
+    status:
+      p.status === 'Resolved'
+        ? 'Resolved'
+        : p.status === 'In Progress'
+          ? 'In Progress'
+          : p.status === 'Matched'
+            ? 'Matched'
+            : p.status === 'Verified'
+              ? 'Verified'
+              : p.status === 'Under Verification'
+                ? 'Under Verification'
+                : 'Submitted',
+    stage: 'Reported',
+    impactScore: 0,
+    impactBreakdown: {
+      affectedPopulation: 0,
+      severity: 0,
+      communitySupport: 0,
+      evidenceQuality: 0,
+      recurrence: 0,
+      urgency: 0,
+    },
+    verifiedCitizens: 0,
+    communitySupport: 0,
+    evidenceCount: p.image_url ? 1 : 0,
+    affectedPeople: 0,
+    daysUnresolved: 0,
+    aiTags: p.subcategory ? [p.subcategory] : [],
+    supportingReports: 0,
+    createdAt: p.created_at,
+    lifecycle: [
+      {
+        stage: 'Reported',
+        status: 'active',
+        date: p.created_at,
+      },
+    ],
+  }))
 }
 
-export function getChallengeById(id: string): Challenge | undefined {
+  export async function getChallengeById(id: string): Promise<Challenge | undefined> {
+  const challenges = await getChallenges()
   return challenges.find((c) => c.id === id)
 }
 
 export function getDistrictStats() {
   return districtStats
 }
-
 export function getUniversityMatches() {
   return universityMatches
 }
@@ -47,8 +110,40 @@ export function getEarlyWarnings() {
   return earlyWarnings
 }
 
-export function getProjects() {
-  return projects
+export async function getProjects() {
+  const { data, error } = await supabase
+    .from('solutions')
+    .select(`
+      id,
+      title,
+      description,
+      estimated_cost,
+      timeline,
+      status,
+      universities (
+        name
+      )
+    `)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching projects:', error)
+    return []
+  }
+
+  return (data ?? []).map((s: any) => ({
+    id: s.id,
+    title: s.title,
+    status: s.status,
+    university: s.universities?.name ?? 'University',
+    team: 'Student Innovation Team',
+    timeline: [
+      {
+        stage: 'Solution Developed',
+        status: 'active',
+      },
+    ],
+  }))
 }
 
 export function getNotifications() {

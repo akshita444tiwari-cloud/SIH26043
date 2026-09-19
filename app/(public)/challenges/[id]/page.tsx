@@ -1,4 +1,5 @@
-import Link from 'next/link'
+import link from 'next/Lsink'
+import { getChallengeById, getChallenges, getDuplicateCluster } from '@/lib/services'
 import { notFound } from 'next/navigation'
 import {
   ArrowLeft,
@@ -6,12 +7,12 @@ import {
   CheckCircle2,
   FileText,
   Layers,
+  Link,
   MapPin,
   ThumbsUp,
   TriangleAlert,
   Users,
 } from 'lucide-react'
-import { getChallengeById, getChallenges, getDuplicateCluster } from '@/lib/services'
 import { challenges } from '@/lib/mock-data'
 import { Card } from '@/components/kit/primitives'
 import { Badge, SeverityBadge, StatusBadge } from '@/components/kit/primitives'
@@ -30,7 +31,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const challenge = getChallengeById(id)
+  const challenge = await getChallengeById(id)
   if (!challenge) return { title: 'Challenge not found' }
   return {
     title: `${challenge.title} · ${challenge.id}`,
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ChallengeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const challenge = getChallengeById(id)
+  const challenge = await getChallengeById(id)
   if (!challenge) notFound()
 
   const cluster = getDuplicateCluster()
@@ -63,11 +64,11 @@ export default async function ChallengeDetailPage({ params }: { params: Promise<
       <section className="border-b border-border bg-forest-deep/[0.04] paper-bg">
         <div className="mx-auto max-w-7xl px-4 pb-8 pt-6 md:px-6">
           <Link
-            href="/challenges"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-forest-deep"
-          >
-            <ArrowLeft className="size-4" /> Back to all challenges
-          </Link>
+  href="/challenges"
+  className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-forest-deep"
+>
+  <ArrowLeft className="size-4" /> Back to all challenges
+</Link>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Badge tone="forest">{challenge.domain}</Badge>
@@ -163,7 +164,8 @@ export default async function ChallengeDetailPage({ params }: { params: Promise<
                         <div className="text-sm font-semibold text-forest-deep">{r.locality}</div>
                         <div className="text-xs text-muted-foreground">Reported {r.date}</div>
                       </div>
-                      <div className="flex gap-4 text-xs text-muted-foreground">
+                      
+                                  <div className="flex gap-4 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <ThumbsUp className="size-3.5" /> {r.support}
                         </span>

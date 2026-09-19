@@ -28,7 +28,7 @@ export default async function IndustryDashboard() {
   const opportunities = (await getChallenges())
     .filter((c) => ['Water', 'Agriculture', 'Energy', 'Healthcare'].includes(c.domain))
     .slice(0, 4)
-  const projects = getProjects()
+  const projects = awaits getProjects()
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
