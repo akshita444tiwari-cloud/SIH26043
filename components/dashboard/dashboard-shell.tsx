@@ -3,15 +3,33 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Bell, ChevronLeft, ExternalLink, Globe, LogOut, Menu, X } from 'lucide-react'
+import {
+  Bell,
+  ChevronLeft,
+  ExternalLink,
+  Globe,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/lib/types'
-import { DASHBOARD_TITLES, ROLE_DISPLAY, ROLE_LABELS, getNotifications } from '@/lib/services'
+import {
+  DASHBOARD_TITLES,
+  ROLE_DISPLAY,
+  ROLE_LABELS,
+  getNotifications,
+} from '@/lib/services'
 import { DASHBOARD_NAV, ROLE_ICON } from '@/lib/dashboard-nav'
 import { JharkhandEmblem } from '@/components/cultural/motifs'
 import { Toaster } from '@/components/kit/toast'
+import { supabase } from '@/lib/supabase'
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
@@ -22,6 +40,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const title = DASHBOARD_TITLES[role]
   const isSubPage = segments.length > 2
   const unread = getNotifications().filter((n) => n.unread).length
+
+  async function handleLogout() {
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      console.error('Logout error:', error.message)
+      return
+    }
+
+    window.location.href = '/login'
+  }
 
   return (
     <div className="min-h-screen bg-cream/40 lg:grid lg:grid-cols-[16rem_1fr]">
@@ -34,10 +63,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-center gap-2.5 border-b border-border px-4 py-4">
           <JharkhandEmblem className="size-10" />
+
           <div className="leading-tight">
-            <div className="font-serif text-sm font-bold text-forest-deep">Jharkhand</div>
-            <div className="text-[0.7rem] text-muted-foreground">Societal Innovation</div>
+            <div className="font-serif text-sm font-bold text-forest-deep">
+              Jharkhand
+            </div>
+
+            <div className="text-[0.7rem] text-muted-foreground">
+              Societal Innovation
+            </div>
           </div>
+
           <button
             type="button"
             className="ml-auto grid size-8 place-items-center rounded-lg text-muted-foreground lg:hidden"
@@ -53,11 +89,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-forest-deep text-cream">
               <RoleIcon className="size-4.5" />
             </span>
+
             <div className="min-w-0">
               <div className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
                 {ROLE_LABELS[role]}
               </div>
-              <div className="truncate text-sm font-semibold text-forest-deep">{ROLE_DISPLAY[role]}</div>
+
+              <div className="truncate text-sm font-semibold text-forest-deep">
+                {ROLE_DISPLAY[role]}
+              </div>
             </div>
           </div>
         </div>
@@ -65,7 +105,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="grid gap-1">
             {nav.map((item, i) => {
-              const active = item.href.startsWith('/') ? pathname === item.href : !isSubPage && i === 0
+              const active =
+                item.href.startsWith('/')
+                  ? pathname === item.href
+                  : !isSubPage && i === 0
+
               return (
                 <li key={item.label}>
                   <Link
@@ -92,14 +136,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             href="/"
             className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/75 transition-colors hover:bg-primary/10 hover:text-forest-deep"
           >
-            <Globe className="size-4.5" /> Public Site
+            <Globe className="size-4.5" />
+            Public Site
           </Link>
-          <Link
-            href="/login"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary transition-colors hover:bg-secondary/10"
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary transition-colors hover:bg-secondary/10"
           >
-            <LogOut className="size-4.5" /> Switch Role
-          </Link>
+            <LogOut className="size-4.5" />
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -129,10 +177,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               href={`/dashboard/${role}`}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-forest-deep"
             >
-              <ChevronLeft className="size-4" /> Back to dashboard
+              <ChevronLeft className="size-4" />
+              Back to dashboard
             </Link>
           ) : (
-            <h1 className="truncate font-serif text-base font-bold text-forest-deep md:text-lg">{title}</h1>
+            <h1 className="truncate font-serif text-base font-bold text-forest-deep md:text-lg">
+              {title}
+            </h1>
           )}
 
           <div className="ml-auto flex items-center gap-2">
@@ -142,22 +193,29 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               aria-label={`Notifications (${unread} unread)`}
             >
               <Bell className="size-4.5" />
+
               {unread > 0 && (
                 <span className="absolute -right-1 -top-1 grid size-4.5 min-w-4.5 place-items-center rounded-full bg-secondary px-1 text-[0.6rem] font-bold text-secondary-foreground">
                   {unread}
                 </span>
               )}
             </button>
+
             <span className="hidden items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3 sm:inline-flex">
               <span className="grid size-7 place-items-center rounded-full bg-forest-deep text-cream">
                 <RoleIcon className="size-4" />
               </span>
-              <span className="text-xs font-semibold text-forest-deep">{ROLE_LABELS[role]}</span>
+
+              <span className="text-xs font-semibold text-forest-deep">
+                {ROLE_LABELS[role]}
+              </span>
             </span>
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-6">
+          {children}
+        </main>
       </div>
 
       <Toaster />
@@ -185,11 +243,20 @@ export function DashSection({
     <section id={id} className={cn('scroll-mt-20', className)}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-serif text-xl font-bold text-forest-deep">{title}</h2>
-          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+          <h2 className="font-serif text-xl font-bold text-forest-deep">
+            {title}
+          </h2>
+
+          {description && (
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {description}
+            </p>
+          )}
         </div>
+
         {action}
       </div>
+
       {children}
     </section>
   )
