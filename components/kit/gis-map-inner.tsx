@@ -20,7 +20,11 @@ function severitySplit(active: number) {
   return { critical, high, medium, low }
 }
 
-function tooltipHtml(name: string, layer: GisLayer) {
+function tooltipHtml(
+  name: string,
+  layer: GisLayer,
+  realCount: number,
+) {
   const stat = getStatFor(name)
   const v = layerValue(name, layer)
   const s = severitySplit(stat.activeChallenges)
@@ -28,7 +32,7 @@ function tooltipHtml(name: string, layer: GisLayer) {
     <div class="gis-tip">
       <div class="gis-tip-name">${name}</div>
       <div class="gis-tip-row"><span>${layer}</span><b>${v}/100</b></div>
-      <div class="gis-tip-row"><span>Active problems</span><b>${stat.activeChallenges}</b></div>
+      <div class="gis-tip-row"><span>Active problems</span><b>${realCount}</b></div>
       <div class="gis-tip-sev">
         <span class="crit">Critical ${s.critical}</span>
         <span class="high">High ${s.high}</span>
@@ -55,12 +59,28 @@ export default function GisMapInner({
   layer,
   selectedName,
   onSelect,
+  heatmapData,
 }: {
   layer: GisLayer
   selectedName?: string
   onSelect: (name: string) => void
+  heatmapData: any[]
 }) {
   const [data, setData] = useState<FeatureCollection | null>(null)
+  const problemsByDistrict = useMemo(() => {
+  const counts: Record<string, number> = {}
+
+  heatmapData.forEach((problem) => {
+    if (!problem.district) return
+
+    const key = normKey(problem.district)
+    const weight = Number(problem.weight) || 1
+
+    counts[key] = (counts[key] ?? 0) + weight
+  })
+
+  return counts
+}, [heatmapData])
 
   useEffect(() => {
     let cancelled = false
@@ -77,16 +97,21 @@ export default function GisMapInner({
 
   const style = useMemo(
     () => (feature?: Feature) => {
-      const name = districtName(feature)
-      const selected = !!selectedName && normKey(name) === normKey(selectedName)
-      return {
-        fillColor: heatColor(layerValue(name, layer)),
+     const name = districtName(feature)
+const selected = !!selectedName && normKey(name) === normKey(selectedName)
+
+const maxProblems = Math.max(1, ...Object.values(problemsByDistrict))
+const districtCount = problemsByDistrict[normKey(name)] ?? 0
+const heatValue = (districtCount / maxProblems) * 100
+
+return {
+  fillColor: heatColor(heatValue),
         weight: selected ? 2.5 : 0.8,
         color: selected ? '#2b4a35' : '#5b7a5f',
         fillOpacity: selected ? 0.95 : 0.82,
       }
     },
-    [layer, selectedName],
+   [layer, selectedName, problemsByDistrict],
   )
 
   const geoRef = useRef<L.GeoJSON | null>(null)
@@ -94,7 +119,8 @@ export default function GisMapInner({
   const onEachFeature = useMemo(
     () => (feature: Feature, lyr: L.Layer) => {
       const name = districtName(feature)
-      lyr.bindTooltip(tooltipHtml(name, layer), {
+      const realCount = problemsByDistrict[normKey(name)] ?? 0
+      lyr.bindTooltip(tooltipHtml(name, layer, realCount), {
         sticky: true,
         direction: 'top',
         className: 'gis-tooltip',
@@ -118,7 +144,7 @@ export default function GisMapInner({
         click: () => onSelect(name),
       })
     },
-    [layer, selectedName, onSelect],
+    [layer, selectedName, onSelect, problemsByDistrict],
   )
 
   return (

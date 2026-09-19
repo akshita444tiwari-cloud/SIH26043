@@ -1,9 +1,10 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Activity, Layers, MapPin, ShieldCheck, TrendingUp, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import { GIS_LAYERS, getStatFor, HEAT_STOPS, layerValue, normKey, type GisLayer } from '@/lib/gis'
 import { challenges } from '@/lib/mock-data'
 import { Card, SeverityBadge } from './primitives'
@@ -24,8 +25,26 @@ export function JharkhandMap({
   className?: string
   defaultDistrict?: string
 }) {
+  
   const [layer, setLayer] = useState<GisLayer>('Overall Challenges')
   const [selectedName, setSelectedName] = useState<string | null>(defaultDistrict ?? null)
+  const [heatmapData, setHeatmapData] = useState<any[]>([])
+  useEffect(() => {
+    async function fetchHeatmapData() {
+     
+      const { data, error } = await supabase.rpc('get_heatmap_data')
+
+      if (error) {
+        console.error('Heatmap data error:', error)
+        return
+      }
+
+      console.log('Heatmap data:', data)
+      setHeatmapData(data ?? [])
+    }
+
+    fetchHeatmapData()
+  }, [])
 
   const selected = selectedName ? getStatFor(selectedName) : null
 
@@ -87,30 +106,33 @@ export function JharkhandMap({
               layer={layer}
               selectedName={selectedName ?? undefined}
               onSelect={(name) => setSelectedName(name)}
+              heatmapData={heatmapData}
             />
           </div>
-
-          {/* Legend */}
-          <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex items-center gap-2 rounded-lg border border-border bg-card/95 px-3 py-1.5 text-[0.65rem] text-muted-foreground backdrop-blur">
-            <span>Low</span>
-            <span className="flex h-2.5 w-28 overflow-hidden rounded-full">
-              {HEAT_STOPS.map((s, i) => (
-                <span key={i} className="flex-1" style={{ background: s.color }} />
-              ))}
-            </span>
-            <span>High</span>
-          </div>
-
-          {/* Layer badge */}
-          <div className="pointer-events-none absolute right-3 top-3 z-[500] rounded-lg border border-border bg-card/95 px-3 py-1.5 text-xs font-semibold text-forest-deep backdrop-blur">
-            {layer}
-          </div>
         </div>
-      </Card>
 
-      {/* Detail panel */}
-      <Card className="flex flex-col p-4">
-        {selected ? (
+        {/* Legend */}
+        <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex items-center gap-2 rounded-lg border border-border bg-card/95 px-3 py-1.5 text-[0.65rem] text-muted-foreground backdrop-blur">
+          <span>Low</span>
+          <span className="flex h-2.5 w-28 overflow-hidden rounded-full">
+            {HEAT_STOPS.map((s, i) => (
+              <span key={i} className="flex-1" style={{ background: s.color }} />
+            ))}
+          </span>
+          <span>High</span>
+        </div>
+
+        {/* Layer badge */}
+        <div className="pointer-events-none absolute right-3 top-3 z-[500] rounded-lg border border-border bg-card/95 px-3 py-1.5 text-xs font-semibold text-forest-deep backdrop-blur">
+          {layer}
+        </div>
+    
+      </Card >
+
+    {/* Detail panel */ }
+    < Card className = "flex flex-col p-4" >
+    {
+      selected?(
           <div>
             <div className="flex items-start gap-2">
               <MapPin className="mt-0.5 size-4 shrink-0 text-secondary" />
@@ -156,43 +178,46 @@ export function JharkhandMap({
               </span>
             </div>
 
-            {districtChallenges.length > 0 && (
-              <div className="mt-4 border-t border-border pt-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Key challenges here
-                </h4>
-                <ul className="mt-2 space-y-2">
-                  {districtChallenges.map((c) => (
-                    <li key={c.id}>
-                      <a
-                        href={`/challenges/${c.id}`}
-                        className="block rounded-lg border border-border p-2.5 transition-colors hover:border-secondary/40 hover:bg-primary/5"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="line-clamp-1 text-sm font-medium text-forest-deep">{c.title}</span>
-                          <SeverityBadge severity={c.severity} className="shrink-0" />
-                        </div>
-                        <span className="text-[0.7rem] text-muted-foreground">
-                          {c.domain} · Impact {c.impactScore}
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+  {
+    districtChallenges.length > 0 && (
+      <div className="mt-4 border-t border-border pt-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Key challenges here
+        </h4>
+        <ul className="mt-2 space-y-2">
+          {districtChallenges.map((c) => (
+            <li key={c.id}>
+              <a
+                href={`/challenges/${c.id}`}
+                className="block rounded-lg border border-border p-2.5 transition-colors hover:border-secondary/40 hover:bg-primary/5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="line-clamp-1 text-sm font-medium text-forest-deep">{c.title}</span>
+                  <SeverityBadge severity={c.severity} className="shrink-0" />
+                </div>
+                <span className="text-[0.7rem] text-muted-foreground">
+                  {c.domain} · Impact {c.impactScore}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+          </div >
         ) : (
-          <div className="grid flex-1 place-items-center py-12 text-center">
-            <div>
-              <MapPin className="mx-auto size-8 text-muted-foreground/50" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                Select a district on the map to view its challenge profile.
-              </p>
-            </div>
-          </div>
-        )}
-      </Card>
+    <div className="grid flex-1 place-items-center py-12 text-center">
+      <div>
+        <MapPin className="mx-auto size-8 text-muted-foreground/50" />
+        <p className="mt-2 text-sm text-muted-foreground">
+          Select a district on the map to view its challenge profile.
+        </p>
+      </div>
     </div>
+  )
+}
+      </Card >
+    </div >
   )
 }
