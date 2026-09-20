@@ -1,653 +1,908 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Cpu,
+  ImagePlus,
+  MapPin,
+  Sparkles,
+  Users,
+  X,
+} from 'lucide-react'
+
 import { cn } from '@/lib/utils'
+import type { Severity } from '@/lib/types'
+import { predictCategory, estimateImpactScore } from '@/lib/services'
+import { DISTRICTS } from '@/lib/mock-data'
+
+import {
+  Card,
+  Badge,
+  SeverityBadge,
+} from '@/components/kit/primitives'
+
+import { AiLabel } from '@/components/kit/section-heading'
+import { ImpactRing } from '@/components/kit/impact-score'
 import { supabase } from '@/lib/supabase'
 
-/*
- * We know these two deployed Edge Function names.
- * Replace ONLY the duplicate function name when you tell me its exact name.
- */
-const ANALYZE_FUNCTION = 'analyze-complaint'
-const DUPLICATE_FUNCTION =  'check-duplicate'
-const RECOMMEND_FUNCTION = 'recommend-universities'
+const SEVERITIES: Severity[] = [
+  'Low',
+  'Medium',
+  'High',
+  'Critical',
+]
+
+const STEPS = [
+  'Describe',
+  'Location & Impact',
+  'AI Review',
+  'Submitted',
+]
 
 export default function SubmitChallengePage() {
-  const [step, setStep] = useState(1)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [step, setStep] = useState(0)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [district, setDistrict] = useState('')
+
+  const [district, setDistrict] = useState(DISTRICTS[0])
   const [locality, setLocality] = useState('')
-  const [severity, setSeverity] = useState('Medium')
-  const [affected, setAffected] = useState('')
-  const [photos, setPhotos] = useState<File[]>([])
 
-  const [problemId, setProblemId] = useState<string | null>(null)
-  const [duplicateResult, setDuplicateResult] = useState<any>(null)
-  const [universityRecommendations, setUniversityRecommendations] = useState<any[]>([])
-  const [integrationError, setIntegrationError] = useState<string | null>(null)
+  const [severity, setSeverity] =
+    useState<Severity>('High')
 
-  const prediction = useMemo(() => {
-    const text = `${title} ${description}`.toLowerCase()
+  const [affected, setAffected] = useState(500)
 
-    if (
-      text.includes('water') ||
-      text.includes('drainage') ||
-      text.includes('handpump')
-    ) {
-      return {
-        category: 'Water & Sanitation',
-        confidence: 94,
-        tags: ['water', 'sanitation'],
-      }
-    }
+  const [photos, setPhotos] = useState<
+    {
+      id: string
+      url: string
+      name: string
+    }[]
+  >([])
 
-    if (
-      text.includes('school') ||
-      text.includes('teacher') ||
-      text.includes('student')
-    ) {
-      return {
-        category: 'Education',
-        confidence: 92,
-        tags: ['education'],
-      }
-    }
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-    if (
-      text.includes('road') ||
-      text.includes('pothole') ||
-      text.includes('transport')
-    ) {
-      return {
-        category: 'Roads & Transport',
-        confidence: 91,
-        tags: ['roads', 'transport'],
-      }
-    }
+  const fileInputRef =
+    useRef<HTMLInputElement>(null)
 
-    if (
-      text.includes('hospital') ||
-      text.includes('health') ||
-      text.includes('medicine')
-    ) {
-      return {
-        category: 'Healthcare',
-        confidence: 90,
-        tags: ['healthcare'],
-      }
-    }
-
-    return {
-      category: 'Other',
-      confidence: 88,
-      tags: ['community'],
-    }
-  }, [title, description])
-
-  const estimatedScore = useMemo(() => {
-    let score = 5
-
-    if (severity === 'High') score += 2
-    if (severity === 'Critical') score += 4
-    if (severity === 'Low') score -= 2
-
-    if (affected) {
-      const number = Number(affected)
-
-      if (number >= 1000) score += 2
-      else if (number >= 100) score += 1
-    }
-
-    return Math.max(1, Math.min(10, score))
-  }, [severity, affected])
-
-  const handleNext = async () => {
-    if (step !== 2) {
-      setStep((s) => s + 1)
-      return
-    }
-
-    setIsSubmitting(true)
-    setIntegrationError(null)
-
-    try {
-      // --------------------------------------------------
-      // 1. Check authentication session
-      // --------------------------------------------------
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      console.log('CURRENT SESSION:', session)
-
-      if (!session) {
-        alert(
-          'You are not logged in. Please log in before submitting a problem.'
-        )
-        return
-      }
-
-      // --------------------------------------------------
-      // 2. Create the problem in the problems table
-      // --------------------------------------------------
-
-      const { data: problem, error: problemError } = await supabase
-        .from('problems')
-        .insert({
-          title,
-          description,
-          district,
-          block: locality,
-          priority: severity,
-          status: 'Submitted',
-          submitted_by: session.user.id,
-        })
-        .select('id')
-        .single()
-
-      if (problemError) {
-        console.error('Problem submission error:', problemError)
-        alert(`Failed to submit the problem: ${problemError.message}`)
-        return
-      }
-
-      if (!problem?.id) {
-        alert('Problem was created, but no problem ID was returned.')
-        return
-      }
-
-      const newProblemId = problem.id
-      setProblemId(newProblemId)
-
-      console.log('Problem created successfully:', newProblemId)
-
-      // --------------------------------------------------
-      // 3. Run AI analysis
-      //    This creates/updates the problem_ai row and
-      //    generates the embedding.
-      // --------------------------------------------------
-
-      const {
-        data: analysisData,
-        error: analysisError,
-      } = await supabase.functions.invoke(ANALYZE_FUNCTION, {
-        body: {
-          problem_id: newProblemId,
-        },
+  useEffect(() => {
+    return () => {
+      photos.forEach((photo) => {
+        URL.revokeObjectURL(photo.url)
       })
+    }
 
-      if (analysisError) {
-        console.error('Analyze complaint error:', analysisError)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-        setIntegrationError(
-          `Problem was created, but AI analysis failed: ${analysisError.message}`
-        )
+  // -----------------------------
+  // PHOTO HANDLING
+  // -----------------------------
 
-        setStep(3)
-        return
-      }
+  const addPhotos = (
+    files: FileList | null,
+  ) => {
+    if (!files) return
 
-      if (analysisData?.success === false) {
-        console.error('Analyze complaint failed:', analysisData)
-
-        setIntegrationError(
-          `Problem was created, but AI analysis failed: ${
-            analysisData.error ?? 'Unknown error'
-          }`
-        )
-
-        setStep(3)
-        return
-      }
-
-      console.log('AI analysis completed:', analysisData)
-
-      // --------------------------------------------------
-      // 4. Run duplicate detection
-      // --------------------------------------------------
-
-      if (DUPLICATE_FUNCTION !==  'check-duplicate') {
-        const {
-          data: duplicateData,
-          error: duplicateError,
-        } = await supabase.functions.invoke(DUPLICATE_FUNCTION, {
-          body: {
-            problem_id: newProblemId,
-          },
-        })
-
-        if (duplicateError) {
-          console.error('Duplicate detection error:', duplicateError)
-
-          setIntegrationError(
-            `AI analysis completed, but duplicate detection failed: ${duplicateError.message}`
-          )
-        } else if (duplicateData?.success === false) {
-          console.error('Duplicate detection failed:', duplicateData)
-
-          setIntegrationError(
-            `AI analysis completed, but duplicate detection failed: ${
-              duplicateData.error ?? 'Unknown error'
-            }`
-          )
-        } else {
-          console.log('Duplicate detection completed:', duplicateData)
-          setDuplicateResult(duplicateData)
-        }
-      } else {
-        console.warn(
-          'Duplicate detection skipped because DUPLICATE_FUNCTION is not set yet.'
-        )
-      }
-
-      // --------------------------------------------------
-      // 5. Recommend universities
-      //    This depends on problem_ai already existing,
-      //    so it must run AFTER analyze-complaint.
-      // --------------------------------------------------
-
-      const {
-        data: recommendationData,
-        error: recommendationError,
-      } = await supabase.functions.invoke(RECOMMEND_FUNCTION, {
-        body: {
-          problem_id: newProblemId,
-        },
-      })
-
-      if (recommendationError) {
-        console.error(
-          'University recommendation error:',
-          recommendationError
-        )
-
-        if (!integrationError) {
-          setIntegrationError(
-            `AI analysis completed, but university recommendations failed: ${recommendationError.message}`
-          )
-        }
-      } else if (recommendationData?.success === false) {
-        console.error(
-          'University recommendation failed:',
-          recommendationData
-        )
-
-        if (!integrationError) {
-          setIntegrationError(
-            `AI analysis completed, but university recommendations failed: ${
-              recommendationData.error ?? 'Unknown error'
-            }`
-          )
-        }
-      } else {
-        console.log(
-          'University recommendations completed:',
-          recommendationData
-        )
-
-        setUniversityRecommendations(
-          recommendationData?.recommendations ?? []
-        )
-      }
-
-      // --------------------------------------------------
-      // 6. Show submitted screen
-      // --------------------------------------------------
-
-      setStep(3)
-    } catch (error) {
-      console.error('Unexpected submission error:', error)
-
-      setIntegrationError(
-        error instanceof Error
-          ? error.message
-          : 'Something went wrong while submitting the problem.'
+    const next = Array.from(files)
+      .filter((file) =>
+        file.type.startsWith('image/'),
       )
+      .map((file) => ({
+        id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+        url: URL.createObjectURL(file),
+        name: file.name,
+      }))
 
-      setStep(3)
-    } finally {
-      setIsSubmitting(false)
+    if (next.length) {
+      setPhotos((prev) => [
+        ...prev,
+        ...next,
+      ])
     }
   }
 
-  const handleBack = () => {
-    if (isSubmitting) return
-    setStep((s) => Math.max(1, s - 1))
+  const removePhoto = (id: string) => {
+    setPhotos((prev) => {
+      const target = prev.find(
+        (photo) => photo.id === id,
+      )
+
+      if (target) {
+        URL.revokeObjectURL(target.url)
+      }
+
+      return prev.filter(
+        (photo) => photo.id !== id,
+      )
+    })
+  }
+
+  // -----------------------------
+  // AI CATEGORY PREDICTION
+  // -----------------------------
+
+  const prediction = useMemo(() => {
+    const text =
+      `${title} ${description}`.trim()
+
+    if (text.length < 4) {
+      return null
+    }
+
+    return predictCategory(text)
+  }, [title, description])
+
+  // -----------------------------
+  // IMPACT SCORE
+  // -----------------------------
+
+  const estimatedScore = useMemo(
+    () =>
+      estimateImpactScore(
+        affected,
+        severity,
+      ),
+    [affected, severity],
+  )
+
+  // -----------------------------
+  // STEP VALIDATION
+  // -----------------------------
+
+  const canContinue =
+    step === 0
+      ? title.length > 4 &&
+        description.length > 12
+      : step === 1
+        ? locality.length > 1
+        : true
+
+  // -----------------------------
+  // SUBMIT PROBLEM TO SUPABASE
+  // -----------------------------
+
+  async function handleSubmit() {
+    if (submitting) return
+
+    setSubmitting(true)
+    setSubmitError('')
+
+    try {
+      // Get logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } =
+        await supabase.auth.getUser()
+
+      if (userError || !user) {
+        setSubmitError(
+          'You must be logged in to submit a problem.',
+        )
+
+        setSubmitting(false)
+        return
+      }
+
+      console.log(
+        'Submitting problem for user:',
+        user.id,
+      )
+
+      // Insert into problems table
+      const { error: insertError } =
+        await supabase
+          .from('problems')
+          .insert({
+            title: title,
+            description: description,
+
+            category:
+              prediction?.domain ?? 'Other',
+
+            district: district,
+
+            block: locality,
+
+            location_name: locality,
+
+            priority:
+              severity.toLowerCase(),
+
+            status: 'submitted',
+
+            // IMPORTANT:
+            // Your actual database column is submitted_by
+            submitted_by: user.id,
+          })
+
+      if (insertError) {
+        console.error(
+          'Problem submission error:',
+          insertError,
+        )
+
+        setSubmitError(
+          insertError.message,
+        )
+
+        setSubmitting(false)
+        return
+      }
+
+      // Success
+      console.log(
+        'Problem submitted successfully',
+      )
+
+      setSubmitting(false)
+      setStep(3)
+    } catch (error) {
+      console.error(
+        'Unexpected submission error:',
+        error,
+      )
+
+      setSubmitError(
+        'Something went wrong while submitting the problem.',
+      )
+
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Submit a Challenge</h1>
-          <p className="mt-2 text-muted-foreground">
-            Report a community problem and help connect it with people who can
-            solve it.
-          </p>
-        </div>
+    <div className="mx-auto max-w-3xl space-y-6">
 
-        <div className="mb-8 flex items-center gap-3">
-          {[1, 2, 3].map((item) => (
-            <div key={item} className="flex items-center gap-3">
-              <div
-                className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-full border text-sm font-medium',
-                  step >= item
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border text-muted-foreground'
-                )}
-              >
-                {item}
-              </div>
+      {/* HEADER */}
 
-              {item < 3 && (
-                <div
-                  className={cn(
-                    'h-px w-12',
-                    step > item ? 'bg-primary' : 'bg-border'
-                  )}
-                />
+      <div>
+        <Link
+          href="/dashboard/citizen"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-forest-deep"
+        >
+          <ArrowLeft className="size-4" />
+          Back to dashboard
+        </Link>
+
+        <h1 className="mt-3 font-serif text-2xl font-bold text-forest-deep">
+          Report a Community Problem
+        </h1>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          Our AI assists with categorization,
+          deduplication, and impact scoring as you
+          type.
+        </p>
+      </div>
+
+      {/* STEPPER */}
+
+      <ol className="flex items-center gap-2">
+        {STEPS.map((s, i) => (
+          <li
+            key={s}
+            className="flex flex-1 items-center gap-2"
+          >
+            <span
+              className={cn(
+                'grid size-7 shrink-0 place-items-center rounded-full border-2 text-xs font-bold',
+
+                i < step &&
+                  'border-primary bg-primary text-primary-foreground',
+
+                i === step &&
+                  'border-secondary bg-secondary/15 text-secondary',
+
+                i > step &&
+                  'border-border bg-card text-muted-foreground',
               )}
-            </div>
-          ))}
-        </div>
-
-        {step === 1 && (
-          <div className="space-y-6 rounded-xl border bg-card p-6">
-            <div>
-              <h2 className="text-xl font-semibold">Describe the problem</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Give enough detail so the problem can be understood clearly.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Contaminated drinking water"
-                className="w-full rounded-lg border bg-background px-3 py-2"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the problem..."
-                rows={5}
-                className="w-full rounded-lg border bg-background px-3 py-2"
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">District</label>
-                <input
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  placeholder="District"
-                  className="w-full rounded-lg border bg-background px-3 py-2"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Locality</label>
-                <input
-                  value={locality}
-                  onChange={(e) => setLocality(e.target.value)}
-                  placeholder="Locality / Block"
-                  className="w-full rounded-lg border bg-background px-3 py-2"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Severity</label>
-                <select
-                  value={severity}
-                  onChange={(e) => setSeverity(e.target.value)}
-                  className="w-full rounded-lg border bg-background px-3 py-2"
-                >
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                  <option>Critical</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Approx. people affected
-                </label>
-                <input
-                  value={affected}
-                  onChange={(e) => setAffected(e.target.value)}
-                  type="number"
-                  placeholder="e.g. 500"
-                  className="w-full rounded-lg border bg-background px-3 py-2"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Evidence / Photos
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) =>
-                  setPhotos(Array.from(e.target.files ?? []))
-                }
-                className="w-full rounded-lg border bg-background px-3 py-2"
-              />
-
-              {photos.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  {photos.length} photo{photos.length > 1 ? 's' : ''} selected
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={handleNext}
-                disabled={!title || !description}
-                className="rounded-lg bg-primary px-5 py-2.5 text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-6 rounded-xl border bg-card p-6">
-            <div>
-              <h2 className="text-xl font-semibold">AI Review</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Review the information before submitting your challenge.
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                Predicted category
-              </p>
-              <p className="mt-1 font-semibold">{prediction.category}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Confidence: {prediction.confidence}%
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                Estimated impact score
-              </p>
-              <p className="mt-1 text-2xl font-bold">
-                {estimatedScore}/10
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <p className="font-medium">Duplicate check</p>
-
-              {duplicateResult?.is_duplicate ? (
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm font-medium">
-                    Similar complaint detected
-                  </p>
-
-                  <p className="text-sm text-muted-foreground">
-                    Similarity:{' '}
-                    {typeof duplicateResult.similarity === 'number'
-                      ? `${(duplicateResult.similarity * 100).toFixed(1)}%`
-                      : 'Available in result'}
-                  </p>
-
-                  {duplicateResult.matched_problem?.title && (
-                    <p className="text-sm text-muted-foreground">
-                      Matched problem:{' '}
-                      {duplicateResult.matched_problem.title}
-                    </p>
-                  )}
-                </div>
-              ) : duplicateResult ? (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  No sufficiently similar complaint found.
-                </p>
+            >
+              {i < step ? (
+                <CheckCircle2 className="size-4" />
               ) : (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Duplicate detection will run after submission.
-                </p>
+                i + 1
               )}
-            </div>
+            </span>
 
-            <div className="flex justify-between">
-              <button
-                onClick={handleBack}
-                disabled={isSubmitting}
-                className="rounded-lg border px-5 py-2.5 disabled:opacity-50"
-              >
-                Back
-              </button>
+            <span
+              className={cn(
+                'hidden text-xs font-medium sm:inline',
 
-              <button
-                onClick={handleNext}
-                disabled={isSubmitting}
-                className="rounded-lg bg-primary px-5 py-2.5 text-primary-foreground disabled:opacity-50"
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit challenge'}
-              </button>
-            </div>
-          </div>
-        )}
+                i === step
+                  ? 'text-forest-deep'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {s}
+            </span>
 
-        {step === 3 && (
-          <div className="space-y-6 rounded-xl border bg-card p-8">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-2xl">
-                ✓
-              </div>
+            {i < STEPS.length - 1 && (
+              <span
+                className={cn(
+                  'h-0.5 flex-1 rounded-full',
 
-              <h2 className="text-2xl font-bold">Challenge submitted</h2>
-
-              <p className="mt-2 text-muted-foreground">
-                Your problem has been submitted successfully and is now under
-                verification.
-              </p>
-            </div>
-
-            {problemId && (
-              <div className="rounded-lg border p-4">
-                <p className="text-sm text-muted-foreground">
-                  Challenge ID
-                </p>
-                <p className="mt-1 break-all font-mono text-sm">
-                  {problemId}
-                </p>
-              </div>
-            )}
-
-            {duplicateResult && (
-              <div className="rounded-lg border p-4">
-                <p className="font-medium">Duplicate analysis</p>
-
-                {duplicateResult.is_duplicate ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    A similar complaint was found with similarity{' '}
-                    {typeof duplicateResult.similarity === 'number'
-                      ? `${(duplicateResult.similarity * 100).toFixed(1)}%`
-                      : 'available in the result'}.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    No sufficiently similar complaint was found.
-                  </p>
+                  i < step
+                    ? 'bg-primary'
+                    : 'bg-border',
                 )}
-              </div>
+              />
             )}
+          </li>
+        ))}
+      </ol>
 
-            {universityRecommendations.length > 0 && (
-              <div className="rounded-lg border p-4">
-                <p className="font-medium">Recommended universities</p>
+      {/* STEP 0 */}
 
-                <div className="mt-3 space-y-2">
-                  {universityRecommendations.map((university, index) => (
+      {step === 0 && (
+        <Card className="space-y-5 p-6">
+
+          <div>
+            <label
+              htmlFor="title"
+              className="text-sm font-semibold text-forest-deep"
+            >
+              Problem title
+            </label>
+
+            <input
+              id="title"
+              value={title}
+              onChange={(e) =>
+                setTitle(e.target.value)
+              }
+              placeholder="e.g. Contaminated drinking water from community handpump"
+              className="mt-1.5 w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-secondary"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="desc"
+              className="text-sm font-semibold text-forest-deep"
+            >
+              Describe the problem
+            </label>
+
+            <textarea
+              id="desc"
+              value={description}
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
+              rows={5}
+              placeholder="Explain what’s happening, who is affected, and how long it has persisted…"
+              className="mt-1.5 w-full resize-none rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-secondary"
+            />
+          </div>
+
+          {/* PHOTOS */}
+
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                addPhotos(e.target.files)
+                e.target.value = ''
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                fileInputRef.current?.click()
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-4 text-sm font-medium text-muted-foreground transition-colors hover:border-secondary/40 hover:text-forest-deep"
+            >
+              <ImagePlus className="size-4.5" />
+
+              {photos.length
+                ? 'Add more photos or evidence'
+                : 'Add photos or evidence (optional)'}
+            </button>
+
+            {photos.length > 0 && (
+              <>
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {photos.map((photo) => (
                     <div
-                      key={
-                        university.id ??
-                        university.university_id ??
-                        index
-                      }
-                      className="rounded-lg bg-muted/50 p-3"
+                      key={photo.id}
+                      className="group relative aspect-square overflow-hidden rounded-lg border border-border"
                     >
-                      <p className="font-medium">
-                        {university.name ??
-                          university.university_name ??
-                          `University ${index + 1}`}
-                      </p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={
+                          photo.url ||
+                          '/placeholder.svg'
+                        }
+                        alt={photo.name}
+                        className="size-full object-cover"
+                      />
 
-                      {university.expertise && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Expertise: {university.expertise}
-                        </p>
-                      )}
-
-                      {typeof university.similarity === 'number' && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Match: {(university.similarity * 100).toFixed(1)}%
-                        </p>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removePhoto(photo.id)
+                        }
+                        className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-forest-deep/70 text-cream backdrop-blur transition-colors hover:bg-secondary"
+                        aria-label={`Remove ${photo.name}`}
+                      >
+                        <X className="size-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {integrationError && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                <p className="text-sm font-medium">
-                  Integration notice
-                </p>
+                <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <CheckCircle2 className="size-3.5" />
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {integrationError}
+                  {photos.length} evidence photo
+                  {photos.length > 1
+                    ? 's'
+                    : ''}{' '}
+                  attached
                 </p>
-              </div>
+              </>
             )}
           </div>
-        )}
-      </div>
+
+          {/* AI CATEGORY */}
+
+          {prediction && (
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
+
+              <AiLabel>
+                <Cpu className="size-3" />
+                Live AI Categorization
+              </AiLabel>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+
+                <span className="text-sm text-foreground/75">
+                  Detected domain:
+                </span>
+
+                <Badge tone="forest">
+                  {prediction.domain}
+                </Badge>
+
+                <span className="text-xs text-muted-foreground">
+                  {prediction.confidence}%
+                  confidence
+                </span>
+
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {prediction.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-md bg-accent px-2 py-0.5 text-[0.7rem] font-medium text-accent-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* STEP 1 */}
+
+      {step === 1 && (
+        <Card className="space-y-5 p-6">
+
+          <div className="grid gap-5 sm:grid-cols-2">
+
+            <div>
+              <label
+                htmlFor="district"
+                className="text-sm font-semibold text-forest-deep"
+              >
+                District
+              </label>
+
+              <div className="relative mt-1.5">
+
+                <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+                <select
+                  id="district"
+                  value={district}
+                  onChange={(e) =>
+                    setDistrict(e.target.value)
+                  }
+                  className="w-full appearance-none rounded-xl border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-secondary"
+                >
+                  {DISTRICTS.map((d) => (
+                    <option key={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="locality"
+                className="text-sm font-semibold text-forest-deep"
+              >
+                Locality / Block
+              </label>
+
+              <input
+                id="locality"
+                value={locality}
+                onChange={(e) =>
+                  setLocality(e.target.value)
+                }
+                placeholder="e.g. Kathikund Block"
+                className="mt-1.5 w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-secondary"
+              />
+            </div>
+
+          </div>
+
+          {/* SEVERITY */}
+
+          <div>
+
+            <span className="text-sm font-semibold text-forest-deep">
+              Severity
+            </span>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+
+              {SEVERITIES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() =>
+                    setSeverity(s)
+                  }
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 transition-colors',
+
+                    severity === s
+                      ? 'border-secondary bg-secondary/10'
+                      : 'border-border hover:bg-muted',
+                  )}
+                >
+                  <SeverityBadge
+                    severity={s}
+                  />
+                </button>
+              ))}
+
+            </div>
+          </div>
+
+          {/* AFFECTED PEOPLE */}
+
+          <div>
+
+            <label
+              htmlFor="affected"
+              className="flex items-center justify-between text-sm font-semibold text-forest-deep"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Users className="size-4" />
+                Estimated people affected
+              </span>
+
+              <span className="font-serif text-lg text-secondary">
+                {affected.toLocaleString(
+                  'en-IN',
+                )}
+              </span>
+            </label>
+
+            <input
+              id="affected"
+              type="range"
+              min={50}
+              max={50000}
+              step={50}
+              value={affected}
+              onChange={(e) =>
+                setAffected(
+                  Number(e.target.value),
+                )
+              }
+              className="mt-2 w-full accent-[var(--secondary)]"
+            />
+
+          </div>
+
+        </Card>
+      )}
+
+      {/* STEP 2 */}
+
+      {step === 2 && (
+        <Card className="p-6">
+
+          <AiLabel>
+            <Sparkles className="size-3" />
+            AI Pre-submission Review
+          </AiLabel>
+
+          <div className="mt-4 grid gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
+
+            <div className="space-y-3">
+
+              <h3 className="font-serif text-lg font-bold text-forest-deep">
+                {title ||
+                  'Untitled challenge'}
+              </h3>
+
+              <div className="flex flex-wrap items-center gap-2">
+
+                {prediction && (
+                  <Badge tone="forest">
+                    {prediction.domain}
+                  </Badge>
+                )}
+
+                <SeverityBadge
+                  severity={severity}
+                />
+
+                <Badge tone="outline">
+                  <MapPin className="size-3" />
+                  {locality || '—'}, {district}
+                </Badge>
+
+              </div>
+
+              <p className="text-sm text-foreground/75">
+
+                Estimated{' '}
+
+                <span className="font-semibold text-forest-deep">
+                  {affected.toLocaleString(
+                    'en-IN',
+                  )}
+                </span>{' '}
+
+                people affected. This preliminary
+                impact score will be refined by
+                community verification and evidence.
+
+              </p>
+
+            </div>
+
+            <div className="flex flex-col items-center">
+
+              <ImpactRing
+                score={estimatedScore}
+              />
+
+              <span className="mt-2 text-xs font-medium text-muted-foreground">
+                Preliminary impact
+              </span>
+
+            </div>
+
+          </div>
+
+          <div className="mt-5 space-y-3 border-t border-border pt-5">
+
+            {[
+              {
+                label: 'Duplicate check',
+                value:
+                  'No exact duplicate found — 3 related reports nearby',
+                ok: true,
+              },
+
+              photos.length > 0
+                ? {
+                    label:
+                      'Evidence quality',
+                    value: `${photos.length} photo${
+                      photos.length > 1
+                        ? 's'
+                        : ''
+                    } attached — strengthens verification`,
+                    ok: true,
+                  }
+                : {
+                    label:
+                      'Evidence quality',
+                    value:
+                      'Add photos to strengthen verification',
+                    ok: false,
+                  },
+
+              {
+                label: 'Routing',
+                value: `Will be routed to ${district} district administration`,
+                ok: true,
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="flex items-start gap-2.5 text-sm"
+              >
+
+                <CheckCircle2
+                  className={cn(
+                    'mt-0.5 size-4.5 shrink-0',
+
+                    item.ok
+                      ? 'text-primary'
+                      : 'text-gold',
+                  )}
+                />
+
+                <div>
+
+                  <span className="font-semibold text-forest-deep">
+                    {item.label}:{' '}
+                  </span>
+
+                  <span className="text-foreground/75">
+                    {item.value}
+                  </span>
+
+                </div>
+              </div>
+            ))}
+
+          </div>
+
+          {/* ERROR */}
+
+          {submitError && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
+
+        </Card>
+      )}
+
+      {/* STEP 3 */}
+
+      {step === 3 && (
+        <Card className="flex flex-col items-center p-10 text-center">
+
+          <span className="grid size-16 place-items-center rounded-full bg-primary/12 text-primary">
+            <CheckCircle2 className="size-9" />
+          </span>
+
+          <h2 className="mt-4 font-serif text-2xl font-bold text-forest-deep">
+            Challenge submitted
+          </h2>
+
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            Your report has entered community
+            verification. You’ll be notified as it
+            gets verified, deduplicated, and matched
+            with universities and partners.
+          </p>
+
+          <div className="mt-4 flex items-center gap-2">
+
+            <Badge
+              tone="outline"
+              className="font-mono text-[0.7rem]"
+            >
+              Submitted successfully
+            </Badge>
+
+            <Badge tone="gold">
+              Under Verification
+            </Badge>
+
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+
+            <Link
+              href="/dashboard/citizen"
+              className="rounded-full bg-forest-deep px-5 py-2.5 text-sm font-semibold text-cream transition-colors hover:bg-forest"
+            >
+              Go to dashboard
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                setStep(0)
+                setTitle('')
+                setDescription('')
+                setLocality('')
+                setSeverity('High')
+                setAffected(500)
+                setSubmitError('')
+                setPhotos([])
+              }}
+              className="rounded-full border border-forest/40 px-5 py-2.5 text-sm font-semibold text-forest-deep transition-colors hover:bg-primary/10"
+            >
+              Report another
+            </button>
+
+          </div>
+
+        </Card>
+      )}
+
+      {/* NAVIGATION */}
+
+      {step < 3 && (
+        <div className="flex items-center justify-between">
+
+          <button
+            type="button"
+            onClick={() =>
+              setStep((current) =>
+                Math.max(
+                  0,
+                  current - 1,
+                ),
+              )
+            }
+            disabled={
+              step === 0 ||
+              submitting
+            }
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-forest-deep transition-colors hover:bg-muted disabled:opacity-40"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (step === 2) {
+                handleSubmit()
+              } else {
+                setStep(
+                  (current) =>
+                    current + 1,
+                )
+              }
+            }}
+            disabled={
+              !canContinue ||
+              submitting
+            }
+            className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-5 py-2.5 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-brick disabled:opacity-40"
+          >
+
+            {step === 2
+              ? submitting
+                ? 'Submitting...'
+                : 'Submit challenge'
+              : 'Continue'}
+
+            {!submitting && (
+              <ArrowRight className="size-4" />
+            )}
+
+          </button>
+
+        </div>
+      )}
+
     </div>
   )
 }
