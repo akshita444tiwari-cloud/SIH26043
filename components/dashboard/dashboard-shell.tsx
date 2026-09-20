@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Bell,
   ChevronLeft,
@@ -12,14 +12,16 @@ import {
   Menu,
   X,
 } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
 import type { Role } from '@/lib/types'
+
 import {
   DASHBOARD_TITLES,
-  ROLE_DISPLAY,
   ROLE_LABELS,
   getNotifications,
 } from '@/lib/services'
+
 import { DASHBOARD_NAV, ROLE_ICON } from '@/lib/dashboard-nav'
 import { JharkhandEmblem } from '@/components/cultural/motifs'
 import { Toaster } from '@/components/kit/toast'
@@ -31,15 +33,76 @@ export function DashboardShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+
   const [open, setOpen] = useState(false)
+  const [userName, setUserName] = useState('')
+  const [userRole, setUserRole] = useState<Role | null>(null)
+  const [checkingRole, setCheckingRole] = useState(true)
 
   const segments = pathname.split('/').filter(Boolean)
-  const role = (segments[1] as Role) ?? 'citizen'
-  const nav = DASHBOARD_NAV[role] ?? []
-  const RoleIcon = ROLE_ICON[role]
-  const title = DASHBOARD_TITLES[role]
+
+  const routeRole = (segments[1] as Role) ?? 'citizen'
+
+  const nav = DASHBOARD_NAV[routeRole] ?? []
+  const RoleIcon = ROLE_ICON[routeRole]
+  const title = DASHBOARD_TITLES[routeRole]
+
   const isSubPage = segments.length > 2
+
   const unread = getNotifications().filter((n) => n.unread).length
+
+  useEffect(() => {
+    async function loadUserProfile() {
+      setCheckingRole(true)
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      // User logged out
+      if (!user) {
+        window.location.href = '/login'
+        return
+      }
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Profile fetch error:', error.message)
+        setCheckingRole(false)
+        return
+      }
+
+      if (profile?.full_name) {
+        setUserName(profile.full_name)
+      }
+
+      if (!profile?.role) {
+        console.error('User role not found')
+        setCheckingRole(false)
+        return
+      }
+
+      const actualRole = profile.role as Role
+
+      setUserRole(actualRole)
+      setCheckingRole(false)
+
+      // Role protection
+      // Example:
+      // Citizen tries to open /dashboard/university
+      // → send them back to /dashboard/citizen
+      if (routeRole !== actualRole) {
+        window.location.href = `/dashboard/${actualRole}`
+      }
+    }
+
+    loadUserProfile()
+  }, [routeRole])
 
   async function handleLogout() {
     const { error } = await supabase.auth.signOut()
@@ -52,6 +115,23 @@ export function DashboardShell({
     window.location.href = '/login'
   }
 
+  // While checking the user's actual role
+  if (checkingRole || !userRole) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-cream/40">
+        <div className="text-center">
+          <div className="font-serif text-lg font-bold text-forest-deep">
+            Loading dashboard...
+          </div>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            Checking your account
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-cream/40 lg:grid lg:grid-cols-[16rem_1fr]">
       {/* Sidebar */}
@@ -61,6 +141,7 @@ export function DashboardShell({
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
+        {/* Logo */}
         <div className="flex items-center gap-2.5 border-b border-border px-4 py-4">
           <JharkhandEmblem className="size-10" />
 
@@ -84,6 +165,7 @@ export function DashboardShell({
           </button>
         </div>
 
+        {/* User information */}
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2.5 rounded-xl bg-forest-deep/[0.06] p-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-forest-deep text-cream">
@@ -92,16 +174,17 @@ export function DashboardShell({
 
             <div className="min-w-0">
               <div className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
-                {ROLE_LABELS[role]}
+                {ROLE_LABELS[routeRole]}
               </div>
 
               <div className="truncate text-sm font-semibold text-forest-deep">
-                {ROLE_DISPLAY[role]}
+                {userName || 'Loading...'}
               </div>
             </div>
           </div>
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="grid gap-1">
             {nav.map((item, i) => {
@@ -131,6 +214,7 @@ export function DashboardShell({
           </ul>
         </nav>
 
+        {/* Bottom actions */}
         <div className="border-t border-border p-3">
           <Link
             href="/"
@@ -151,6 +235,7 @@ export function DashboardShell({
         </div>
       </aside>
 
+      {/* Mobile overlay */}
       {open && (
         <button
           type="button"
@@ -174,7 +259,7 @@ export function DashboardShell({
 
           {isSubPage ? (
             <Link
-              href={`/dashboard/${role}`}
+              href={`/dashboard/${routeRole}`}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-forest-deep"
             >
               <ChevronLeft className="size-4" />
@@ -207,7 +292,7 @@ export function DashboardShell({
               </span>
 
               <span className="text-xs font-semibold text-forest-deep">
-                {ROLE_LABELS[role]}
+                {ROLE_LABELS[routeRole]}
               </span>
             </span>
           </div>
@@ -233,7 +318,7 @@ export function DashSection({
   className,
 }: {
   id?: string
-  title: string
+  title: React.ReactNode
   description?: string
   action?: React.ReactNode
   children: React.ReactNode
