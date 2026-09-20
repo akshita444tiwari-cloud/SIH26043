@@ -53,7 +53,7 @@ const impactByDomain = [
 
 export default async function UniversityDashboard() {
   const incoming = (await getChallenges()).slice(0, 4)
-  const projects = getProjects()
+  const projects = await getProjects()
   const departmentLoad = [
     { label: 'Civil & Environmental Eng.', value: 8, hint: 'projects' },
     { label: 'Electrical & Instrumentation', value: 6, hint: 'projects' },

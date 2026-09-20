@@ -27,8 +27,13 @@ export async function getChallenges(): Promise<Challenge[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('Error fetching challenges:', error)
-    return []
+    
+    console.error('Error fetching projects:', {
+  message: error.message,
+  details: error.details,
+  hint: error.hint,
+  code: error.code,
+})
   }
 
   return (data ?? []).map((p): Challenge => ({
@@ -94,9 +99,37 @@ export async function getChallenges(): Promise<Challenge[]> {
 export function getDistrictStats() {
   return districtStats
 }
-export function getUniversityMatches() {
-  return universityMatches
+  export async function getUniversityMatches() {
+  const { data, error } = await supabase
+    .from('universities')
+    .select('id, name, district, description, expertise, website')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching universities:', error)
+    return []
+  }
+
+  return (data ?? []).map((u: any) => ({
+    id: u.id,
+    name: u.name,
+    district: u.district,
+    matchScore: 0,
+    reasons: [
+      ...(u.expertise ? [`Expertise: ${u.expertise}`] : []),
+      ...(u.description ? [u.description] : []),
+    ],
+    factors: [
+      { label: 'Academic Expertise', score: 0 },
+      { label: 'Faculty Expertise', score: 0 },
+      { label: 'Past Projects', score: 0 },
+      { label: 'Infrastructure', score: 0 },
+      { label: 'Innovation Capacity', score: 0 },
+      { label: 'Geographic Relevance', score: 0 },
+    ],
+  }))
 }
+  
 
 export function getIndustryMatches() {
   return industryMatches
