@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+
 import Link from 'next/link'
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,8 +17,14 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+
 import type { Severity } from '@/lib/types'
-import { predictCategory, estimateImpactScore } from '@/lib/services'
+
+import {
+  predictCategory,
+  estimateImpactScore,
+} from '@/lib/services'
+
 import { DISTRICTS } from '@/lib/mock-data'
 
 import {
@@ -26,7 +34,9 @@ import {
 } from '@/components/kit/primitives'
 
 import { AiLabel } from '@/components/kit/section-heading'
+
 import { ImpactRing } from '@/components/kit/impact-score'
+
 import { supabase } from '@/lib/supabase'
 
 const SEVERITIES: Severity[] = [
@@ -43,19 +53,54 @@ const STEPS = [
   'Submitted',
 ]
 
+type DuplicateResult = {
+  success?: boolean
+  is_duplicate?: boolean
+  similarity?: number
+  message?: string
+  matched_problem?: {
+    id?: string
+    title?: string
+    description?: string
+  }
+  matches?: unknown[]
+}
+
+type UniversityRecommendation = {
+  university_id?: string
+  university_name?: string
+  district?: string
+  description?: string
+  expertise?: string
+  match_score?: number
+}
+
+type AnalysisResult = {
+  category?: string
+  subcategory?: string
+  department?: string
+  priority?: string
+  impact_score?: number
+  summary?: string
+}
+
 export default function SubmitChallengePage() {
   const [step, setStep] = useState(0)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
 
-  const [district, setDistrict] = useState(DISTRICTS[0])
+  const [district, setDistrict] = useState(
+    DISTRICTS[0],
+  )
+
   const [locality, setLocality] = useState('')
 
   const [severity, setSeverity] =
     useState<Severity>('High')
 
-  const [affected, setAffected] = useState(500)
+  const [affected, setAffected] =
+    useState(500)
 
   const [photos, setPhotos] = useState<
     {
@@ -65,8 +110,28 @@ export default function SubmitChallengePage() {
     }[]
   >([])
 
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] =
+    useState(false)
+
+  const [submitError, setSubmitError] =
+    useState('')
+
+  const [workflowWarning, setWorkflowWarning] =
+    useState('')
+
+  const [problemId, setProblemId] =
+    useState<string | null>(null)
+
+  const [analysisResult, setAnalysisResult] =
+    useState<AnalysisResult | null>(null)
+
+  const [duplicateResult, setDuplicateResult] =
+    useState<DuplicateResult | null>(null)
+
+  const [
+    universityRecommendations,
+    setUniversityRecommendations,
+  ] = useState<UniversityRecommendation[]>([])
 
   const fileInputRef =
     useRef<HTMLInputElement>(null)
@@ -125,7 +190,7 @@ export default function SubmitChallengePage() {
   }
 
   // -----------------------------
-  // AI CATEGORY PREDICTION
+  // LOCAL CATEGORY PREVIEW
   // -----------------------------
 
   const prediction = useMemo(() => {
@@ -140,7 +205,7 @@ export default function SubmitChallengePage() {
   }, [title, description])
 
   // -----------------------------
-  // IMPACT SCORE
+  // LOCAL IMPACT PREVIEW
   // -----------------------------
 
   const estimatedScore = useMemo(
@@ -165,7 +230,7 @@ export default function SubmitChallengePage() {
         : true
 
   // -----------------------------
-  // SUBMIT PROBLEM TO SUPABASE
+  // COMPLETE SUBMISSION WORKFLOW
   // -----------------------------
 
   async function handleSubmit() {
@@ -173,21 +238,28 @@ export default function SubmitChallengePage() {
 
     setSubmitting(true)
     setSubmitError('')
+    setWorkflowWarning('')
+
+    setProblemId(null)
+    setAnalysisResult(null)
+    setDuplicateResult(null)
+    setUniversityRecommendations([])
 
     try {
-      // Get logged-in user
+      // --------------------------------------------------
+      // 1. Get logged-in user
+      // --------------------------------------------------
+
       const {
         data: { user },
         error: userError,
-      } =
-        await supabase.auth.getUser()
+      } = await supabase.auth.getUser()
 
       if (userError || !user) {
         setSubmitError(
           'You must be logged in to submit a problem.',
         )
 
-        setSubmitting(false)
         return
       }
 
@@ -196,32 +268,38 @@ export default function SubmitChallengePage() {
         user.id,
       )
 
-      // Insert into problems table
-      const { error: insertError } =
-        await supabase
-          .from('problems')
-          .insert({
-            title: title,
-            description: description,
+      // --------------------------------------------------
+      // 2. Insert problem into problems table
+      // --------------------------------------------------
 
-            category:
-              prediction?.domain ?? 'Other',
+      const {
+        data: problem,
+        error: insertError,
+      } = await supabase
+        .from('problems')
+        .insert({
+          title: title,
 
-            district: district,
+          description: description,
 
-            block: locality,
+          category:
+            prediction?.domain ?? 'Other',
 
-            location_name: locality,
+          district: district,
 
-            priority:
-              severity.toLowerCase(),
+          block: locality,
 
-            status: 'submitted',
+          location_name: locality,
 
-            // IMPORTANT:
-            // Your actual database column is submitted_by
-            submitted_by: user.id,
-          })
+          priority:
+            severity.toLowerCase(),
+
+          status: 'submitted',
+
+          submitted_by: user.id,
+        })
+        .select('id')
+        .single()
 
       if (insertError) {
         console.error(
@@ -233,16 +311,194 @@ export default function SubmitChallengePage() {
           insertError.message,
         )
 
-        setSubmitting(false)
         return
       }
 
-      // Success
+      if (!problem?.id) {
+        setSubmitError(
+          'Problem was created, but no problem ID was returned.',
+        )
+
+        return
+      }
+
+      const newProblemId = problem.id
+
+      setProblemId(newProblemId)
+
       console.log(
-        'Problem submitted successfully',
+        'Problem created successfully:',
+        newProblemId,
       )
 
-      setSubmitting(false)
+      const warnings: string[] = []
+
+      // --------------------------------------------------
+      // 3. AI ANALYSIS
+      //
+      // This function:
+      // - categorizes the problem
+      // - determines subcategory
+      // - determines department
+      // - determines AI priority
+      // - determines impact score
+      // - generates embedding
+      // - stores result in problem_ai
+      // --------------------------------------------------
+
+      const {
+        data: analysisData,
+        error: analysisError,
+      } = await supabase.functions.invoke(
+        'analyze-complaint',
+        {
+          body: {
+            problem_id: newProblemId,
+          },
+        },
+      )
+
+      if (
+        analysisError ||
+        !analysisData ||
+        analysisData.success === false
+      ) {
+        console.error(
+          'AI analysis error:',
+          analysisError ?? analysisData,
+        )
+
+        warnings.push(
+          `AI analysis failed: ${
+            analysisError?.message ??
+            analysisData?.error ??
+            'Unknown error'
+          }`,
+        )
+      } else {
+        console.log(
+          'AI analysis completed:',
+          analysisData,
+        )
+
+        setAnalysisResult(
+          analysisData.ai_result ?? null,
+        )
+
+        // ------------------------------------------------
+        // 4. DUPLICATE DETECTION
+        //
+        // This runs only after analyze-complaint because
+        // check-duplicate needs the generated embedding.
+        // ------------------------------------------------
+
+        const {
+          data: duplicateData,
+          error: duplicateError,
+        } = await supabase.functions.invoke(
+          'check-duplicate',
+          {
+            body: {
+              problem_id: newProblemId,
+            },
+          },
+        )
+
+        if (
+          duplicateError ||
+          !duplicateData ||
+          duplicateData.success === false
+        ) {
+          console.error(
+            'Duplicate detection error:',
+            duplicateError ?? duplicateData,
+          )
+
+          warnings.push(
+            `Duplicate detection failed: ${
+              duplicateError?.message ??
+              duplicateData?.error ??
+              'Unknown error'
+            }`,
+          )
+        } else {
+          console.log(
+            'Duplicate detection completed:',
+            duplicateData,
+          )
+
+          setDuplicateResult(
+            duplicateData,
+          )
+        }
+
+        // ------------------------------------------------
+        // 5. UNIVERSITY RECOMMENDATIONS
+        //
+        // This runs after analyze-complaint because
+        // recommend-universities reads problem_ai.
+        // ------------------------------------------------
+
+        const {
+          data: recommendationData,
+          error: recommendationError,
+        } = await supabase.functions.invoke(
+          'recommend-universities',
+          {
+            body: {
+              problem_id: newProblemId,
+            },
+          },
+        )
+
+        if (
+          recommendationError ||
+          !recommendationData ||
+          recommendationData.success === false
+        ) {
+          console.error(
+            'University recommendation error:',
+            recommendationError ??
+              recommendationData,
+          )
+
+          warnings.push(
+            `University recommendations failed: ${
+              recommendationError?.message ??
+              recommendationData?.error ??
+              'Unknown error'
+            }`,
+          )
+        } else {
+          console.log(
+            'University recommendations completed:',
+            recommendationData,
+          )
+
+          setUniversityRecommendations(
+            recommendationData.recommendations ?? [],
+          )
+        }
+      }
+
+      // --------------------------------------------------
+      // 6. Show final result
+      //
+      // Even if an AI secondary step fails, the problem
+      // itself has already been created successfully.
+      // --------------------------------------------------
+
+      if (warnings.length > 0) {
+        setWorkflowWarning(
+          warnings.join(' '),
+        )
+      }
+
+      console.log(
+        'Problem submission workflow completed:',
+        newProblemId,
+      )
+
       setStep(3)
     } catch (error) {
       console.error(
@@ -251,9 +507,11 @@ export default function SubmitChallengePage() {
       )
 
       setSubmitError(
-        'Something went wrong while submitting the problem.',
+        error instanceof Error
+          ? error.message
+          : 'Something went wrong while submitting the problem.',
       )
-
+    } finally {
       setSubmitting(false)
     }
   }
@@ -278,8 +536,8 @@ export default function SubmitChallengePage() {
 
         <p className="mt-1 text-sm text-muted-foreground">
           Our AI assists with categorization,
-          deduplication, and impact scoring as you
-          type.
+          deduplication, and impact scoring during
+          the submission process.
         </p>
       </div>
 
@@ -294,13 +552,10 @@ export default function SubmitChallengePage() {
             <span
               className={cn(
                 'grid size-7 shrink-0 place-items-center rounded-full border-2 text-xs font-bold',
-
                 i < step &&
                   'border-primary bg-primary text-primary-foreground',
-
                 i === step &&
                   'border-secondary bg-secondary/15 text-secondary',
-
                 i > step &&
                   'border-border bg-card text-muted-foreground',
               )}
@@ -315,7 +570,6 @@ export default function SubmitChallengePage() {
             <span
               className={cn(
                 'hidden text-xs font-medium sm:inline',
-
                 i === step
                   ? 'text-forest-deep'
                   : 'text-muted-foreground',
@@ -328,7 +582,6 @@ export default function SubmitChallengePage() {
               <span
                 className={cn(
                   'h-0.5 flex-1 rounded-full',
-
                   i < step
                     ? 'bg-primary'
                     : 'bg-border',
@@ -448,9 +701,7 @@ export default function SubmitChallengePage() {
                   <CheckCircle2 className="size-3.5" />
 
                   {photos.length} evidence photo
-                  {photos.length > 1
-                    ? 's'
-                    : ''}{' '}
+                  {photos.length > 1 ? 's' : ''}{' '}
                   attached
                 </p>
               </>
@@ -464,11 +715,10 @@ export default function SubmitChallengePage() {
 
               <AiLabel>
                 <Cpu className="size-3" />
-                Live AI Categorization
+                Category Preview
               </AiLabel>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-
                 <span className="text-sm text-foreground/75">
                   Detected domain:
                 </span>
@@ -478,10 +728,8 @@ export default function SubmitChallengePage() {
                 </Badge>
 
                 <span className="text-xs text-muted-foreground">
-                  {prediction.confidence}%
-                  confidence
+                  {prediction.confidence}% confidence
                 </span>
-
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -560,7 +808,6 @@ export default function SubmitChallengePage() {
           {/* SEVERITY */}
 
           <div>
-
             <span className="text-sm font-semibold text-forest-deep">
               Severity
             </span>
@@ -576,7 +823,6 @@ export default function SubmitChallengePage() {
                   }
                   className={cn(
                     'rounded-full border px-3 py-1.5 transition-colors',
-
                     severity === s
                       ? 'border-secondary bg-secondary/10'
                       : 'border-border hover:bg-muted',
@@ -670,19 +916,15 @@ export default function SubmitChallengePage() {
               </div>
 
               <p className="text-sm text-foreground/75">
-
                 Estimated{' '}
-
                 <span className="font-semibold text-forest-deep">
                   {affected.toLocaleString(
                     'en-IN',
                   )}
                 </span>{' '}
-
-                people affected. This preliminary
-                impact score will be refined by
-                community verification and evidence.
-
+                people affected. The final AI
+                impact assessment will be generated
+                when you submit.
               </p>
 
             </div>
@@ -703,71 +945,61 @@ export default function SubmitChallengePage() {
 
           <div className="mt-5 space-y-3 border-t border-border pt-5">
 
-            {[
-              {
-                label: 'Duplicate check',
-                value:
-                  'No exact duplicate found — 3 related reports nearby',
-                ok: true,
-              },
+            <div className="flex items-start gap-2.5 text-sm">
 
-              photos.length > 0
-                ? {
-                    label:
-                      'Evidence quality',
-                    value: `${photos.length} photo${
-                      photos.length > 1
-                        ? 's'
-                        : ''
-                    } attached — strengthens verification`,
-                    ok: true,
-                  }
-                : {
-                    label:
-                      'Evidence quality',
-                    value:
-                      'Add photos to strengthen verification',
-                    ok: false,
-                  },
+              <CheckCircle2 className="mt-0.5 size-4.5 shrink-0 text-primary" />
 
-              {
-                label: 'Routing',
-                value: `Will be routed to ${district} district administration`,
-                ok: true,
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="flex items-start gap-2.5 text-sm"
-              >
+              <div>
+                <span className="font-semibold text-forest-deep">
+                  Categorization:
+                </span>{' '}
 
-                <CheckCircle2
-                  className={cn(
-                    'mt-0.5 size-4.5 shrink-0',
-
-                    item.ok
-                      ? 'text-primary'
-                      : 'text-gold',
-                  )}
-                />
-
-                <div>
-
-                  <span className="font-semibold text-forest-deep">
-                    {item.label}:{' '}
-                  </span>
-
-                  <span className="text-foreground/75">
-                    {item.value}
-                  </span>
-
-                </div>
+                <span className="text-foreground/75">
+                  AI analysis will run after
+                  submission.
+                </span>
               </div>
-            ))}
+
+            </div>
+
+            <div className="flex items-start gap-2.5 text-sm">
+
+              <CheckCircle2 className="mt-0.5 size-4.5 shrink-0 text-primary" />
+
+              <div>
+                <span className="font-semibold text-forest-deep">
+                  Duplicate check:
+                </span>{' '}
+
+                <span className="text-foreground/75">
+                  The submitted problem will be
+                  checked against existing complaints
+                  using semantic similarity.
+                </span>
+              </div>
+
+            </div>
+
+            <div className="flex items-start gap-2.5 text-sm">
+
+              <CheckCircle2 className="mt-0.5 size-4.5 shrink-0 text-primary" />
+
+              <div>
+                <span className="font-semibold text-forest-deep">
+                  University matching:
+                </span>{' '}
+
+                <span className="text-foreground/75">
+                  Relevant universities will be
+                  recommended from their expertise.
+                </span>
+              </div>
+
+            </div>
 
           </div>
 
-          {/* ERROR */}
+          {/* SUBMISSION ERROR */}
 
           {submitError && (
             <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -792,26 +1024,225 @@ export default function SubmitChallengePage() {
           </h2>
 
           <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            Your report has entered community
-            verification. You’ll be notified as it
-            gets verified, deduplicated, and matched
-            with universities and partners.
+            Your report has been submitted successfully.
+            The AI processing results are shown below.
           </p>
 
-          <div className="mt-4 flex items-center gap-2">
+          {/* PROBLEM ID */}
 
-            <Badge
-              tone="outline"
-              className="font-mono text-[0.7rem]"
-            >
-              Submitted successfully
-            </Badge>
+          {problemId && (
+            <div className="mt-5 w-full rounded-xl border border-border p-4 text-left">
 
-            <Badge tone="gold">
-              Under Verification
-            </Badge>
+              <p className="text-xs font-medium text-muted-foreground">
+                Problem ID
+              </p>
 
-          </div>
+              <p className="mt-1 break-all font-mono text-sm">
+                {problemId}
+              </p>
+
+            </div>
+          )}
+
+          {/* AI ANALYSIS */}
+
+          {analysisResult && (
+            <div className="mt-4 w-full rounded-xl border border-border p-4 text-left">
+
+              <p className="font-semibold text-forest-deep">
+                AI analysis
+              </p>
+
+              <div className="mt-3 grid gap-2 text-sm">
+
+                {analysisResult.category && (
+                  <p>
+                    <span className="font-semibold">
+                      Category:
+                    </span>{' '}
+                    {analysisResult.category}
+                  </p>
+                )}
+
+                {analysisResult.subcategory && (
+                  <p>
+                    <span className="font-semibold">
+                      Subcategory:
+                    </span>{' '}
+                    {analysisResult.subcategory}
+                  </p>
+                )}
+
+                {analysisResult.department && (
+                  <p>
+                    <span className="font-semibold">
+                      Department:
+                    </span>{' '}
+                    {analysisResult.department}
+                  </p>
+                )}
+
+                {analysisResult.priority && (
+                  <p>
+                    <span className="font-semibold">
+                      AI priority:
+                    </span>{' '}
+                    {analysisResult.priority}
+                  </p>
+                )}
+
+                {typeof analysisResult.impact_score ===
+                  'number' && (
+                  <p>
+                    <span className="font-semibold">
+                      AI impact score:
+                    </span>{' '}
+                    {analysisResult.impact_score}/10
+                  </p>
+                )}
+
+                {analysisResult.summary && (
+                  <p>
+                    <span className="font-semibold">
+                      Summary:
+                    </span>{' '}
+                    {analysisResult.summary}
+                  </p>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* DUPLICATE RESULT */}
+
+          {duplicateResult && (
+            <div className="mt-4 w-full rounded-xl border border-border p-4 text-left">
+
+              <p className="font-semibold text-forest-deep">
+                Duplicate analysis
+              </p>
+
+              {duplicateResult.is_duplicate ? (
+                <div className="mt-2 space-y-1 text-sm">
+
+                  <p>
+                    A similar complaint was found.
+                  </p>
+
+                  {typeof duplicateResult.similarity ===
+                    'number' && (
+                    <p>
+                      <span className="font-semibold">
+                        Similarity:
+                      </span>{' '}
+                      {(
+                        duplicateResult.similarity *
+                        100
+                      ).toFixed(1)}
+                      %
+                    </p>
+                  )}
+
+                  {duplicateResult.matched_problem
+                    ?.title && (
+                    <p>
+                      <span className="font-semibold">
+                        Matched problem:
+                      </span>{' '}
+                      {
+                        duplicateResult
+                          .matched_problem
+                          .title
+                      }
+                    </p>
+                  )}
+
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No sufficiently similar complaint
+                  was found.
+                </p>
+              )}
+
+            </div>
+          )}
+
+          {/* UNIVERSITY RECOMMENDATIONS */}
+
+          {universityRecommendations.length > 0 && (
+            <div className="mt-4 w-full rounded-xl border border-border p-4 text-left">
+
+              <p className="font-semibold text-forest-deep">
+                Recommended universities
+              </p>
+
+              <div className="mt-3 space-y-2">
+
+                {universityRecommendations.map(
+                  (university, index) => (
+                    <div
+                      key={
+                        university.university_id ??
+                        index
+                      }
+                      className="rounded-lg bg-muted/50 p-3"
+                    >
+
+                      <p className="font-medium">
+                        {university.university_name ??
+                          `University ${index + 1}`}
+                      </p>
+
+                      {university.district && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          District:{' '}
+                          {university.district}
+                        </p>
+                      )}
+
+                      {university.expertise && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Expertise:{' '}
+                          {university.expertise}
+                        </p>
+                      )}
+
+                      {typeof university.match_score ===
+                        'number' && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Matching expertise:{' '}
+                          {university.match_score}
+                        </p>
+                      )}
+
+                    </div>
+                  ),
+                )}
+
+              </div>
+
+            </div>
+          )}
+
+          {/* WORKFLOW WARNING */}
+
+          {workflowWarning && (
+            <div className="mt-4 w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left text-sm text-yellow-800">
+
+              <p className="font-semibold">
+                Processing notice
+              </p>
+
+              <p className="mt-1">
+                {workflowWarning}
+              </p>
+
+            </div>
+          )}
+
+          {/* ACTIONS */}
 
           <div className="mt-6 flex flex-wrap justify-center gap-3">
 
@@ -826,12 +1257,29 @@ export default function SubmitChallengePage() {
               type="button"
               onClick={() => {
                 setStep(0)
+
                 setTitle('')
+
                 setDescription('')
+
                 setLocality('')
+
                 setSeverity('High')
+
                 setAffected(500)
+
                 setSubmitError('')
+
+                setWorkflowWarning('')
+
+                setProblemId(null)
+
+                setAnalysisResult(null)
+
+                setDuplicateResult(null)
+
+                setUniversityRecommendations([])
+
                 setPhotos([])
               }}
               className="rounded-full border border-forest/40 px-5 py-2.5 text-sm font-semibold text-forest-deep transition-colors hover:bg-primary/10"
